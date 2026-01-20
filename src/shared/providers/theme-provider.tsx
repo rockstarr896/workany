@@ -10,6 +10,7 @@ import {
   getSettings,
   saveSettings,
   type AccentColor,
+  type BackgroundStyle,
 } from '@/shared/db/settings';
 
 type Theme = 'light' | 'dark' | 'system';
@@ -19,8 +20,10 @@ interface ThemeContextType {
   theme: Theme;
   resolvedTheme: ResolvedTheme;
   accentColor: AccentColor;
+  backgroundStyle: BackgroundStyle;
   setTheme: (theme: Theme) => void;
   setAccentColor: (color: AccentColor) => void;
+  setBackgroundStyle: (style: BackgroundStyle) => void;
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
@@ -63,6 +66,16 @@ function applyAccentColor(colorId: AccentColor, resolvedTheme: ResolvedTheme) {
   root.style.setProperty('--sidebar-ring', color);
 }
 
+function applyBackgroundStyle(style: BackgroundStyle) {
+  const root = document.documentElement;
+  // Remove existing background style classes
+  root.classList.remove('bg-warm', 'bg-cool');
+  // Apply new background style class (default has no class)
+  if (style !== 'default') {
+    root.classList.add(`bg-${style}`);
+  }
+}
+
 interface ThemeProviderProps {
   children: ReactNode;
 }
@@ -78,18 +91,26 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
     return settings.accentColor || 'orange';
   });
 
+  const [backgroundStyle, setBackgroundStyleState] = useState<BackgroundStyle>(
+    () => {
+      const settings = getSettings();
+      return settings.backgroundStyle || 'default';
+    }
+  );
+
   const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>(() => {
     const settings = getSettings();
     return resolveTheme(settings.theme);
   });
 
-  // Apply theme and accent color on mount and when they change
+  // Apply theme, accent color, and background style on mount and when they change
   useEffect(() => {
     const resolved = resolveTheme(theme);
     setResolvedTheme(resolved);
     applyTheme(resolved);
     applyAccentColor(accentColor, resolved);
-  }, [theme, accentColor]);
+    applyBackgroundStyle(backgroundStyle);
+  }, [theme, accentColor, backgroundStyle]);
 
   // Listen for system theme changes
   useEffect(() => {
@@ -102,16 +123,18 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
       setResolvedTheme(newResolvedTheme);
       applyTheme(newResolvedTheme);
       applyAccentColor(accentColor, newResolvedTheme);
+      applyBackgroundStyle(backgroundStyle);
     };
 
     mediaQuery.addEventListener('change', handleChange);
     return () => mediaQuery.removeEventListener('change', handleChange);
-  }, [theme, accentColor]);
+  }, [theme, accentColor, backgroundStyle]);
 
   // Apply on initial load
   useEffect(() => {
     applyTheme(resolvedTheme);
     applyAccentColor(accentColor, resolvedTheme);
+    applyBackgroundStyle(backgroundStyle);
   }, []);
 
   const setTheme = (newTheme: Theme) => {
@@ -127,9 +150,24 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
     applyAccentColor(newColor, resolvedTheme);
   };
 
+  const setBackgroundStyle = (newStyle: BackgroundStyle) => {
+    setBackgroundStyleState(newStyle);
+    const settings = getSettings();
+    saveSettings({ ...settings, backgroundStyle: newStyle });
+    applyBackgroundStyle(newStyle);
+  };
+
   return (
     <ThemeContext.Provider
-      value={{ theme, resolvedTheme, accentColor, setTheme, setAccentColor }}
+      value={{
+        theme,
+        resolvedTheme,
+        accentColor,
+        backgroundStyle,
+        setTheme,
+        setAccentColor,
+        setBackgroundStyle,
+      }}
     >
       {children}
     </ThemeContext.Provider>

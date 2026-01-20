@@ -1,17 +1,34 @@
 import { createBrowserRouter } from 'react-router-dom';
-import { HomePage, LibraryPage, TaskDetailPage } from '@/app/pages';
+import { HomePage, LibraryPage, SetupPage, TaskDetailPage } from '@/app/pages';
+import { SetupGuard } from '@/components/setup-guard';
 
 export const router = createBrowserRouter([
   {
     path: '/',
-    element: <HomePage />,
+    element: (
+      <SetupGuard>
+        <HomePage />
+      </SetupGuard>
+    ),
   },
   {
     path: '/task/:taskId',
-    element: <TaskDetailPage />,
+    element: (
+      <SetupGuard>
+        <TaskDetailPage />
+      </SetupGuard>
+    ),
   },
   {
     path: '/library',
-    element: <LibraryPage />,
+    element: (
+      <SetupGuard>
+        <LibraryPage />
+      </SetupGuard>
+    ),
+  },
+  {
+    path: '/setup',
+    element: <SetupPage />,
   },
 ]);

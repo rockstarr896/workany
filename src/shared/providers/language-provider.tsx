@@ -12,7 +12,7 @@ import {
   translations,
   type Language,
   type TranslationKeys,
-} from '@/core/i18n/translations';
+} from '@/config/locale';
 import { getSettings, saveSettings } from '@/shared/db/settings';
 
 interface LanguageContextType {

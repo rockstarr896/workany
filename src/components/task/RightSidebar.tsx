@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import type { AgentMessage } from '@/shared/hooks/useAgent';
 import { cn } from '@/shared/lib/utils';
+import { useLanguage } from '@/shared/providers/language-provider';
+import type { Artifact, ArtifactType } from '@/components/artifacts';
 
 // Use different ports for development (2026) and production (2620)
 const API_PORT = import.meta.env.PROD ? 2620 : 2026;
@@ -22,39 +24,18 @@ import {
   Layers,
   ListTodo,
   Loader2,
+  Music,
   Presentation,
   Search,
   Table,
   Terminal,
+  Type,
+  Video,
   X,
 } from 'lucide-react';
 
-export type ArtifactType =
-  | 'html'
-  | 'jsx'
-  | 'css'
-  | 'json'
-  | 'text'
-  | 'image'
-  | 'code'
-  | 'markdown'
-  | 'csv'
-  | 'document'
-  | 'spreadsheet'
-  | 'presentation'
-  | 'pdf';
-
-export interface Artifact {
-  id: string;
-  name: string;
-  type: ArtifactType;
-  content?: string;
-  path?: string;
-  // For presentations: array of slide contents (HTML or image URLs)
-  slides?: string[];
-  // For spreadsheets: parsed data
-  data?: string[][];
-}
+// Re-export types for backwards compatibility
+export type { Artifact, ArtifactType };
 
 interface ToolUsage {
   id: string;
@@ -158,7 +139,37 @@ function getFileIconByExt(ext?: string) {
     case 'gif':
     case 'svg':
     case 'webp':
+    case 'bmp':
+    case 'ico':
       return FileImage;
+    case 'mp3':
+    case 'wav':
+    case 'ogg':
+    case 'm4a':
+    case 'aac':
+    case 'flac':
+    case 'wma':
+    case 'aud':
+    case 'aiff':
+    case 'mid':
+    case 'midi':
+      return Music;
+    case 'mp4':
+    case 'webm':
+    case 'mov':
+    case 'avi':
+    case 'mkv':
+    case 'm4v':
+    case 'wmv':
+    case 'flv':
+    case '3gp':
+      return Video;
+    case 'ttf':
+    case 'otf':
+    case 'woff':
+    case 'woff2':
+    case 'eot':
+      return Type;
     case 'py':
     case 'rb':
     case 'go':
@@ -211,11 +222,53 @@ function getArtifactTypeByExt(ext?: string): ArtifactType {
     case 'gif':
     case 'svg':
     case 'webp':
+    case 'bmp':
+    case 'ico':
       return 'image';
+    case 'mp3':
+    case 'wav':
+    case 'ogg':
+    case 'm4a':
+    case 'aac':
+    case 'flac':
+    case 'wma':
+    case 'aud':
+    case 'aiff':
+    case 'mid':
+    case 'midi':
+      return 'audio';
+    case 'mp4':
+    case 'webm':
+    case 'mov':
+    case 'avi':
+    case 'mkv':
+    case 'm4v':
+    case 'wmv':
+    case 'flv':
+    case '3gp':
+      return 'video';
+    case 'ttf':
+    case 'otf':
+    case 'woff':
+    case 'woff2':
+    case 'eot':
+      return 'font';
     default:
       return 'code';
   }
 }
+
+// File types that should NOT read content (binary/streaming files)
+const SKIP_CONTENT_TYPES: ArtifactType[] = [
+  'audio',
+  'video',
+  'font',
+  'image',
+  'pdf',
+  'spreadsheet',
+  'presentation',
+  'document',
+];
 
 // Get tool icon based on tool name
 function getToolIcon(toolName: string) {
@@ -426,26 +479,38 @@ function CollapsibleSection({
   title,
   children,
   defaultExpanded = true,
+  action,
 }: {
   title: string;
   children: React.ReactNode;
   defaultExpanded?: boolean;
+  action?: React.ReactNode;
 }) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
 
   return (
     <div className="border-border/50 border-b">
-      <button
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="hover:bg-accent/30 flex w-full cursor-pointer items-center justify-between px-4 py-3 transition-colors"
-      >
-        <span className="text-foreground text-sm font-medium">{title}</span>
-        {isExpanded ? (
-          <ChevronDown className="text-muted-foreground size-4" />
-        ) : (
-          <ChevronRight className="text-muted-foreground size-4" />
-        )}
-      </button>
+      <div className="hover:bg-accent/30 flex w-full items-center justify-between px-4 py-3 transition-colors">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="cursor-pointer"
+          >
+            <span className="text-foreground text-sm font-medium">{title}</span>
+          </button>
+          {action}
+        </div>
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="text-muted-foreground hover:text-foreground p-0.5 transition-colors"
+        >
+          {isExpanded ? (
+            <ChevronDown className="size-4" />
+          ) : (
+            <ChevronRight className="size-4" />
+          )}
+        </button>
+      </div>
       {isExpanded && <div className="pb-3">{children}</div>}
     </div>
   );
@@ -538,8 +603,37 @@ function ToolPreviewModal({
 // Default number of items to show before "show more"
 const DEFAULT_VISIBLE_COUNT = 5;
 
-// Read file content via API
-async function readFileContent(filePath: string): Promise<string | null> {
+// Max file size for text content preview (10MB)
+const MAX_TEXT_FILE_SIZE = 10 * 1024 * 1024;
+
+// Check file size via API
+async function checkFileSize(filePath: string, signal?: AbortSignal): Promise<number | null> {
+  try {
+    const response = await fetch(`${API_URL}/files/stat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ path: filePath }),
+      signal,
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const data = await response.json();
+    if (data.exists && data.size !== undefined) {
+      return data.size;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// Read file content via API with optional abort signal
+async function readFileContent(filePath: string, signal?: AbortSignal): Promise<string | null> {
   try {
     const response = await fetch(`${API_URL}/files/read`, {
       method: 'POST',
@@ -547,6 +641,7 @@ async function readFileContent(filePath: string): Promise<string | null> {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ path: filePath }),
+      signal,
     });
 
     if (!response.ok) {
@@ -558,10 +653,17 @@ async function readFileContent(filePath: string): Promise<string | null> {
       return data.content;
     }
     return null;
-  } catch {
+  } catch (err) {
+    // Don't log abort errors
+    if (err instanceof Error && err.name === 'AbortError') {
+      return null;
+    }
     return null;
   }
 }
+
+// Store active AbortController for file loading - allows cancellation when clicking another file
+let activeFileLoadController: AbortController | null = null;
 
 // File Tree Item Component for recursive directory display
 function FileTreeItem({
@@ -586,20 +688,80 @@ function FileTreeItem({
     } else if (onSelectFile) {
       onSelectFile(file);
     } else {
-      // Load file content and create artifact
-      setIsLoading(true);
-      try {
-        const content = await readFileContent(file.path);
+      const artifactType = getArtifactTypeByExt(ext);
+
+      // For binary/streaming files, don't read content - just pass the path
+      if (SKIP_CONTENT_TYPES.includes(artifactType)) {
         const artifact: Artifact = {
           id: file.path,
           name: file.name,
-          type: getArtifactTypeByExt(ext),
+          type: artifactType,
+          path: file.path,
+        };
+        onSelectArtifact(artifact);
+        return;
+      }
+
+      // Cancel any previous file loading operation
+      if (activeFileLoadController) {
+        activeFileLoadController.abort();
+      }
+
+      // Create new AbortController for this operation
+      const controller = new AbortController();
+      activeFileLoadController = controller;
+
+      // For text-based files, check size first then load content
+      setIsLoading(true);
+      try {
+        // Check file size first
+        const fileSize = await checkFileSize(file.path, controller.signal);
+
+        // If aborted during size check, exit
+        if (controller.signal.aborted) {
+          setIsLoading(false);
+          return;
+        }
+
+        // If file is too large, don't read content
+        if (fileSize !== null && fileSize > MAX_TEXT_FILE_SIZE) {
+          const artifact: Artifact = {
+            id: file.path,
+            name: file.name,
+            type: artifactType,
+            path: file.path,
+            fileSize: fileSize,
+            fileTooLarge: true,
+          };
+          onSelectArtifact(artifact);
+          setIsLoading(false);
+          return;
+        }
+
+        // Read content with abort signal
+        const content = await readFileContent(file.path, controller.signal);
+
+        // If aborted during content read, exit
+        if (controller.signal.aborted) {
+          setIsLoading(false);
+          return;
+        }
+
+        const artifact: Artifact = {
+          id: file.path,
+          name: file.name,
+          type: artifactType,
           path: file.path,
           content: content || undefined,
+          fileSize: fileSize || undefined,
         };
         onSelectArtifact(artifact);
       } finally {
-        setIsLoading(false);
+        // Only clear loading if this is still the active controller
+        if (activeFileLoadController === controller) {
+          setIsLoading(false);
+          activeFileLoadController = null;
+        }
       }
     }
   };
@@ -610,22 +772,17 @@ function FileTreeItem({
         onClick={handleClick}
         disabled={isLoading}
         className={cn(
-          'group flex w-full cursor-pointer items-center gap-1 rounded-md py-1 text-left transition-colors',
+          'group flex w-full cursor-pointer items-center gap-1.5 rounded-md py-1 text-left transition-colors',
           'hover:bg-accent/50',
           isLoading && 'opacity-70'
         )}
-        style={{ paddingLeft: `${depth * 12 + 4}px` }}
+        style={{ paddingLeft: `${depth * 12}px` }}
       >
-        {file.isDir && (
-          <span className="text-muted-foreground shrink-0">
-            {isExpanded ? (
-              <ChevronDown className="size-3" />
-            ) : (
-              <ChevronRight className="size-3" />
-            )}
-          </span>
-        )}
-        {!file.isDir && <span className="w-3" />}
+        <span className="text-muted-foreground flex size-4 shrink-0 items-center justify-center">
+          {file.isDir ? (
+            isExpanded ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />
+          ) : null}
+        </span>
         {isLoading ? (
           <Loader2 className="text-muted-foreground size-4 shrink-0 animate-spin" />
         ) : (
@@ -699,6 +856,7 @@ export function RightSidebar({
   workingDir,
   onSelectWorkingFile,
 }: RightSidebarProps) {
+  const { t } = useLanguage();
   const [selectedTool, setSelectedTool] = useState<ToolUsage | null>(null);
   const [showAllArtifacts, setShowAllArtifacts] = useState(false);
   const [showAllTools, setShowAllTools] = useState(false);
@@ -827,24 +985,56 @@ export function RightSidebar({
     : mcpTools.slice(0, DEFAULT_VISIBLE_COUNT);
   const hasMoreTools = mcpTools.length > DEFAULT_VISIBLE_COUNT;
 
+  // Open working directory in system file explorer
+  const handleOpenWorkingDir = async () => {
+    if (!workingDir) return;
+    try {
+      const response = await fetch(`${API_URL}/files/open`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: workingDir }),
+      });
+      const data = await response.json();
+      if (!data.success) {
+        console.error('[RightSidebar] Failed to open folder:', data.error);
+      }
+    } catch (err) {
+      console.error('[RightSidebar] Error opening folder:', err);
+    }
+  };
+
   return (
     <div className="bg-background flex h-full flex-col overflow-y-auto">
       {/* 1. Working Files Section */}
-      <CollapsibleSection title="Working Files" defaultExpanded={true}>
+      <CollapsibleSection
+        title={t.task.workingFiles}
+        defaultExpanded={true}
+        action={
+          workingDir ? (
+            <button
+              onClick={handleOpenWorkingDir}
+              className="text-muted-foreground hover:text-foreground transition-colors"
+              title={t.task.openInFinder}
+            >
+              <FolderOpen className="size-3.5" />
+            </button>
+          ) : null
+        }
+      >
         <div className="px-4">
           {!workingDir ? (
             <p className="text-muted-foreground py-2 text-sm">
-              等待任务执行...
+              {t.task.waitingForTask}
             </p>
           ) : loadingFiles ? (
             <div className="text-muted-foreground flex items-center gap-2 py-2">
               <Loader2 className="size-4 animate-spin" />
-              <span className="text-sm">Loading...</span>
+              <span className="text-sm">{t.common.loading}</span>
             </div>
           ) : workingFiles.length === 0 ? (
-            <p className="text-muted-foreground py-2 text-sm">暂无文件</p>
+            <p className="text-muted-foreground py-2 text-sm">{t.task.noFiles}</p>
           ) : (
-            <div className="max-h-[250px] overflow-y-auto">
+            <div className="max-h-[250px] space-y-0.5 overflow-y-auto">
               {workingFiles.map((file) => (
                 <FileTreeItem
                   key={file.path}
@@ -859,10 +1049,10 @@ export function RightSidebar({
       </CollapsibleSection>
 
       {/* 2. Artifacts Section */}
-      <CollapsibleSection title="Artifacts">
+      <CollapsibleSection title={t.task.artifacts}>
         <div className="px-4">
           {artifacts.length === 0 ? (
-            <p className="text-muted-foreground py-2 text-sm">暂无输出产物</p>
+            <p className="text-muted-foreground py-2 text-sm">{t.task.noArtifacts}</p>
           ) : (
             <>
               <div className={cn(
@@ -906,10 +1096,10 @@ export function RightSidebar({
       </CollapsibleSection>
 
       {/* 3. Tools Section - MCP tools only */}
-      <CollapsibleSection title="Tools" defaultExpanded={false}>
+      <CollapsibleSection title={t.task.tools} defaultExpanded={false}>
         <div className="px-4">
           {mcpTools.length === 0 ? (
-            <p className="text-muted-foreground py-2 text-sm">暂无 MCP 工具调用</p>
+            <p className="text-muted-foreground py-2 text-sm">{t.task.noTools}</p>
           ) : (
             <>
               <div className={cn(
@@ -968,16 +1158,16 @@ export function RightSidebar({
       </CollapsibleSection>
 
       {/* 4. Skills Section - Skills used during conversation (show folder contents) */}
-      <CollapsibleSection title="Skills" defaultExpanded={false}>
+      <CollapsibleSection title={t.task.skills} defaultExpanded={false}>
         <div className="px-4">
           {loadingSkills ? (
             <div className="text-muted-foreground flex items-center gap-2 py-2">
               <Loader2 className="size-4 animate-spin" />
-              <span className="text-sm">Loading...</span>
+              <span className="text-sm">{t.common.loading}</span>
             </div>
           ) : skillsDirs.length === 0 ? (
             <p className="text-muted-foreground py-2 text-sm">
-              暂无 Skill 调用
+              {t.task.noSkills}
             </p>
           ) : (
             <div className="max-h-[300px] space-y-3 overflow-y-auto">

@@ -15,32 +15,43 @@ import {
   type LibraryFile,
   type Task,
 } from '@/shared/db';
-import { useAgent, type AgentMessage } from '@/shared/hooks/useAgent';
+import { useAgent, type AgentMessage, type MessageAttachment } from '@/shared/hooks/useAgent';
 import { useVitePreview } from '@/shared/hooks/useVitePreview';
 import { cn } from '@/shared/lib/utils';
+import { useLanguage } from '@/shared/providers/language-provider';
 import {
   CheckCircle2,
   ChevronDown,
+  FileText,
   PanelLeft,
+  Paperclip,
   Plus,
   Send,
   Square,
+  X,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 import { Logo } from '@/components/common/logo';
 import { LeftSidebar, SidebarProvider, useSidebar } from '@/components/layout';
-import { ArtifactPreview } from '@/components/task/ArtifactPreview';
+import { ArtifactPreview, type Artifact } from '@/components/artifacts';
 import { PlanApproval } from '@/components/task/PlanApproval';
 import { QuestionInput } from '@/components/task/QuestionInput';
-import { RightSidebar, type Artifact } from '@/components/task/RightSidebar';
+import { RightSidebar } from '@/components/task/RightSidebar';
 import { ToolExecutionItem } from '@/components/task/ToolExecutionItem';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 interface LocationState {
   prompt?: string;
   sessionId?: string;
   taskIndex?: number;
+  attachments?: MessageAttachment[];
 }
 
 // Context for tool selection - allows child components to select tools
@@ -73,12 +84,14 @@ export function TaskDetailPage() {
 }
 
 function TaskDetailContent() {
+  const { t } = useLanguage();
   const { taskId } = useParams();
   const location = useLocation();
   const state = location.state as LocationState | null;
   const initialPrompt = state?.prompt || '';
   const initialSessionId = state?.sessionId;
   const initialTaskIndex = state?.taskIndex || 1;
+  const initialAttachments = state?.attachments;
 
   const {
     messages,
@@ -107,6 +120,16 @@ function TaskDetailContent() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const prevTaskIdRef = useRef<string | undefined>(undefined);
   const isComposingRef = useRef(false); // Track IME composition state
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Attachment state
+  interface Attachment {
+    id: string;
+    file: File;
+    type: 'image' | 'file';
+    preview?: string;
+  }
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
 
   // Auto-collapse left sidebar on task detail page
   useEffect(() => {
@@ -117,8 +140,8 @@ function TaskDetailContent() {
     };
   }, [setLeftOpen]);
 
-  // Panel visibility state
-  const [isRightSidebarVisible, setIsRightSidebarVisible] = useState(true);
+  // Panel visibility state - default to collapsed, auto-expand when content is available
+  const [isRightSidebarVisible, setIsRightSidebarVisible] = useState(false);
   const [isPreviewVisible, setIsPreviewVisible] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -148,6 +171,34 @@ function TaskDetailContent() {
 
     return '';
   }, [sessionFolder, artifacts]);
+
+  // Track if sidebar has been auto-expanded (to avoid re-opening after manual close)
+  const hasAutoExpandedRef = useRef(false);
+
+  // Auto-expand right sidebar when there is actual content (only once)
+  // Content includes: artifacts, MCP tools, or skills (not just workingDir as it may be empty)
+  useEffect(() => {
+    // Skip if already auto-expanded
+    if (hasAutoExpandedRef.current) return;
+
+    // Check if there's actual content to display
+    // Note: workingDir alone doesn't count as content since the directory might be empty
+    const hasArtifacts = artifacts.length > 0;
+    const hasMcpTools = messages.some(
+      (m) => m.type === 'tool_use' && m.name?.startsWith('mcp__')
+    );
+    const hasSkills = messages.some(
+      (m) => m.type === 'tool_use' && m.name?.startsWith('skill::')
+    );
+
+    const hasContent = hasArtifacts || hasMcpTools || hasSkills;
+
+    // Auto-expand when content becomes available (only once)
+    if (hasContent) {
+      setIsRightSidebarVisible(true);
+      hasAutoExpandedRef.current = true;
+    }
+  }, [artifacts.length, messages]);
 
   // Live preview state
   const {
@@ -466,14 +517,28 @@ function TaskDetailContent() {
   useEffect(() => {
     if (prevTaskIdRef.current !== taskId) {
       if (prevTaskIdRef.current !== undefined) {
+        // Reset agent state
         clearMessages();
         setTask(null);
         setHasStarted(false);
         isInitializingRef.current = false; // Reset for new task
+
+        // Reset preview and artifact state
+        setIsPreviewVisible(false);
+        setSelectedArtifact(null);
+        setArtifacts([]);
+        setSelectedToolIndex(null);
+
+        // Reset right sidebar state
+        setIsRightSidebarVisible(false);
+        hasAutoExpandedRef.current = false;
+
+        // Stop live preview if running
+        stopPreview();
       }
       prevTaskIdRef.current = taskId;
     }
-  }, [taskId, clearMessages]);
+  }, [taskId, clearMessages, stopPreview]);
 
   // Load existing task or start new one
   useEffect(() => {
@@ -519,10 +584,24 @@ function TaskDetailContent() {
   }, [taskId]);
 
   const handleReply = async () => {
-    if (replyValue.trim() && !isRunning && taskId) {
+    if ((replyValue.trim() || attachments.length > 0) && !isRunning && taskId) {
       const reply = replyValue.trim();
+
+      // Convert attachments to MessageAttachment format
+      const messageAttachments =
+        attachments.length > 0
+          ? attachments.map((a) => ({
+              id: a.id,
+              type: a.type,
+              name: a.file.name,
+              data: a.preview || '', // Base64 data
+              mimeType: a.file.type,
+            }))
+          : undefined;
+
       setReplyValue('');
-      await continueConversation(reply);
+      setAttachments([]); // Clear attachments after sending
+      await continueConversation(reply, messageAttachments);
     }
   };
 
@@ -552,7 +631,113 @@ function TaskDetailContent() {
     }, 10);
   };
 
+  // File attachment helpers
+  const generateId = () =>
+    `attachment_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+
+  const isImageFile = (file: File) => file.type.startsWith('image/');
+
+  const createImagePreview = (file: File): Promise<string> => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target?.result as string);
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const addFiles = useCallback(async (files: FileList | File[]) => {
+    const fileArray = Array.from(files);
+    const newAttachments: Attachment[] = [];
+
+    for (const file of fileArray) {
+      const isImage = isImageFile(file);
+      const attachment: Attachment = {
+        id: generateId(),
+        file,
+        type: isImage ? 'image' : 'file',
+      };
+
+      if (isImage) {
+        attachment.preview = await createImagePreview(file);
+      }
+
+      newAttachments.push(attachment);
+    }
+
+    setAttachments((prev) => [...prev, ...newAttachments]);
+  }, []);
+
+  const removeAttachment = useCallback((id: string) => {
+    setAttachments((prev) => prev.filter((a) => a.id !== id));
+  }, []);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      addFiles(e.target.files);
+      e.target.value = '';
+    }
+  };
+
+  const openFilePicker = () => {
+    fileInputRef.current?.click();
+  };
+
+  // Handle paste event for image upload
+  const handlePaste = useCallback(
+    async (e: React.ClipboardEvent) => {
+      const items = e.clipboardData.items;
+      const imageFiles: File[] = [];
+
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.type.startsWith('image/')) {
+          const file = item.getAsFile();
+          if (file) {
+            imageFiles.push(file);
+          }
+        }
+      }
+
+      if (imageFiles.length > 0) {
+        e.preventDefault(); // Prevent default paste behavior for images
+        await addFiles(imageFiles);
+      }
+    },
+    [addFiles]
+  );
+
   const displayPrompt = task?.prompt || initialPrompt;
+
+  // Get attachments for the initial user message:
+  // 1. From navigation state (first navigation from home page)
+  // 2. Or from the first user message in messages (when reloading/re-entering)
+  const displayAttachments = useMemo(() => {
+    console.log('[TaskDetail] Computing displayAttachments:');
+    console.log('  - initialAttachments:', initialAttachments?.length || 0);
+    if (initialAttachments && initialAttachments.length > 0) {
+      initialAttachments.forEach((a, i) => {
+        console.log(`  - initialAttachment ${i}: type=${a.type}, hasData=${!!a.data}, dataLength=${a.data?.length || 0}`);
+      });
+      return initialAttachments;
+    }
+    // Find the first user message in messages array
+    const firstUserMessage = messages.find((m) => m.type === 'user');
+    console.log('  - firstUserMessage found:', !!firstUserMessage);
+    if (firstUserMessage?.attachments) {
+      console.log('  - firstUserMessage.attachments:', firstUserMessage.attachments.length);
+    }
+    return firstUserMessage?.attachments;
+  }, [initialAttachments, messages]);
+
+  // Check if we should skip showing the first user message separately
+  // (to avoid duplication when messages array already includes it)
+  const firstMessageIsUserWithSameContent = useMemo(() => {
+    const firstMessage = messages[0];
+    return (
+      firstMessage?.type === 'user' &&
+      firstMessage?.content === displayPrompt
+    );
+  }, [messages, displayPrompt]);
 
   return (
     <ToolSelectionContext.Provider value={toolSelectionValue}>
@@ -656,12 +841,14 @@ function TaskDetailContent() {
                   <div className="flex h-full items-center justify-center">
                     <div className="text-muted-foreground flex items-center gap-3">
                       <div className="size-5 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                      <span>Loading...</span>
+                      <span>{t.common.loading}</span>
                     </div>
                   </div>
                 ) : (
                   <div className="max-w-full min-w-0 space-y-4">
-                    {displayPrompt && <UserMessage content={displayPrompt} />}
+                    {displayPrompt && !firstMessageIsUserWithSameContent && (
+                      <UserMessage content={displayPrompt} attachments={displayAttachments} />
+                    )}
 
                     <MessageList
                       messages={messages}
@@ -704,13 +891,58 @@ function TaskDetailContent() {
                 )}
               >
                 <div className="border-border/60 bg-background rounded-xl border p-3 shadow-sm">
+                  {/* Hidden file input */}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    accept="image/*,.pdf,.doc,.docx,.txt,.md,.json,.csv,.xlsx,.xls,.pptx,.ppt"
+                    onChange={handleFileChange}
+                    className="hidden"
+                  />
+
+                  {/* Attachment Preview */}
+                  {attachments.length > 0 && (
+                    <div className="mb-3 flex flex-wrap gap-2">
+                      {attachments.map((attachment) => (
+                        <div
+                          key={attachment.id}
+                          className="group border-border/50 bg-muted/50 relative flex items-center gap-2 rounded-lg border px-3 py-2"
+                        >
+                          {attachment.type === 'image' && attachment.preview ? (
+                            <img
+                              src={attachment.preview}
+                              alt={attachment.file.name}
+                              className="h-10 w-10 rounded object-cover"
+                            />
+                          ) : (
+                            <div className="bg-muted flex h-10 w-10 items-center justify-center rounded">
+                              <FileText className="text-muted-foreground h-5 w-5" />
+                            </div>
+                          )}
+                          <span className="text-foreground max-w-[120px] truncate text-sm">
+                            {attachment.file.name}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => removeAttachment(attachment.id)}
+                            className="bg-foreground text-background absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full opacity-0 transition-opacity group-hover:opacity-100"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
                   <textarea
                     value={replyValue}
                     onChange={(e) => setReplyValue(e.target.value)}
                     onKeyDown={handleKeyDown}
                     onCompositionStart={handleCompositionStart}
                     onCompositionEnd={handleCompositionEnd}
-                    placeholder="Reply..."
+                    onPaste={handlePaste}
+                    placeholder={t.home.reply}
                     className="bg-background text-foreground placeholder:text-muted-foreground max-h-[80px] min-h-[20px] w-full resize-none border-0 px-1 text-sm focus:outline-none"
                     rows={1}
                     disabled={isRunning}
@@ -718,12 +950,27 @@ function TaskDetailContent() {
 
                   <div className="mt-2 flex items-center justify-between">
                     <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        className="text-muted-foreground hover:bg-accent hover:text-foreground flex size-7 cursor-pointer items-center justify-center rounded-md transition-colors"
-                      >
-                        <Plus className="size-4" />
-                      </button>
+                      <DropdownMenu modal={false}>
+                        <DropdownMenuTrigger
+                          disabled={isRunning}
+                          className="text-muted-foreground hover:bg-accent hover:text-foreground flex size-7 items-center justify-center rounded-md transition-colors disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none"
+                        >
+                          <Plus className="size-4" />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent
+                          align="start"
+                          sideOffset={8}
+                          className="z-50 w-56"
+                        >
+                          <DropdownMenuItem
+                            onSelect={openFilePicker}
+                            className="cursor-pointer gap-3 py-2.5"
+                          >
+                            <Paperclip className="size-4" />
+                            <span>Add files or photos</span>
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
 
                     <div className="flex items-center gap-1">
@@ -737,10 +984,10 @@ function TaskDetailContent() {
                       ) : (
                         <button
                           onClick={handleReply}
-                          disabled={!replyValue.trim()}
+                          disabled={!replyValue.trim() && attachments.length === 0}
                           className={cn(
                             'flex size-7 items-center justify-center rounded-full transition-all',
-                            replyValue.trim()
+                            replyValue.trim() || attachments.length > 0
                               ? 'bg-foreground text-background hover:bg-foreground/90 cursor-pointer'
                               : 'bg-muted text-muted-foreground cursor-not-allowed'
                           )}
@@ -804,14 +1051,55 @@ function TaskDetailContent() {
 }
 
 // User Message Component
-function UserMessage({ content }: { content: string }) {
+function UserMessage({
+  content,
+  attachments,
+}: {
+  content: string;
+  attachments?: MessageAttachment[];
+}) {
+  // Debug logging for attachments
+  if (attachments && attachments.length > 0) {
+    console.log('[UserMessage] Rendering attachments:', attachments.length);
+    attachments.forEach((a, i) => {
+      console.log(`[UserMessage] Attachment ${i}: type=${a.type}, name=${a.name}, hasData=${!!a.data}, dataLength=${a.data?.length || 0}`);
+    });
+  }
+
   return (
     <div className="flex min-w-0 gap-3">
       <div className="min-w-0 flex-1"></div>
       <div className="bg-accent/50 max-w-[85%] min-w-0 rounded-xl px-4 py-3">
-        <p className="text-foreground text-sm break-words whitespace-pre-wrap">
-          {content}
-        </p>
+        {/* Display attachments (images) */}
+        {attachments && attachments.length > 0 && (
+          <div className="mb-2 flex flex-wrap gap-2">
+            {attachments.map((attachment) =>
+              attachment.type === 'image' && attachment.data ? (
+                <img
+                  key={attachment.id}
+                  src={attachment.data}
+                  alt={attachment.name}
+                  className="max-h-48 max-w-full rounded-lg object-contain"
+                />
+              ) : (
+                <div
+                  key={attachment.id}
+                  className="bg-muted flex items-center gap-2 rounded-lg px-3 py-2"
+                >
+                  <FileText className="text-muted-foreground size-4" />
+                  <span className="text-foreground text-sm">
+                    {attachment.name}
+                  </span>
+                </div>
+              )
+            )}
+          </div>
+        )}
+        {content && (
+          <p className="text-foreground text-sm break-words whitespace-pre-wrap">
+            {content}
+          </p>
+        )}
       </div>
     </div>
   );
@@ -1180,7 +1468,12 @@ function MessageItem({
   onRejectPlan?: () => void;
 }) {
   if (message.type === 'user') {
-    return <UserMessage content={message.content || ''} />;
+    return (
+      <UserMessage
+        content={message.content || ''}
+        attachments={message.attachments}
+      />
+    );
   }
 
   if (message.type === 'plan' && message.plan) {

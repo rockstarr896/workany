@@ -114,7 +114,8 @@ agent.post('/', async (c) => {
       body.workDir,
       body.taskId,
       body.modelConfig,
-      body.sandboxConfig
+      body.sandboxConfig,
+      body.images
     )
   );
 

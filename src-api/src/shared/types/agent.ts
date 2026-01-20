@@ -37,6 +37,14 @@ export interface SandboxConfig {
 }
 
 /**
+ * Image attachment for API requests
+ */
+export interface ImageAttachment {
+  data: string; // Base64 encoded image data
+  mimeType: string; // e.g., 'image/png', 'image/jpeg'
+}
+
+/**
  * API Request type for agent endpoints
  */
 export interface AgentRequest {
@@ -58,4 +66,6 @@ export interface AgentRequest {
   modelConfig?: ModelConfig;
   // Sandbox configuration for isolated execution
   sandboxConfig?: SandboxConfig;
+  // Image attachments for vision capabilities
+  images?: ImageAttachment[];
 }

@@ -1,0 +1,161 @@
+export default {
+  title: 'Settings',
+
+  // Categories
+  account: 'Account',
+  general: 'General',
+  workplace: 'Workspace',
+  model: 'Model',
+  provider: 'Provider',
+  mcp: 'MCP',
+  connector: 'Connector',
+  about: 'About',
+
+  // Account
+  manageProfile: 'Manage your profile information',
+  avatar: 'Avatar',
+  clickToUpload: 'Click to upload a new avatar',
+  avatarRecommendation: 'Recommended: Square image, at least 100x100px',
+  nickname: 'Nickname',
+  enterNickname: 'Enter your nickname',
+
+  // General
+  language: 'Language',
+  themeColor: 'Theme Color',
+  appearance: 'Appearance',
+  light: 'Light',
+  dark: 'Dark',
+  system: 'System',
+  backgroundStyle: 'Background Style',
+
+  // Workspace
+  workplaceDescription:
+    'Configure agent runtime, code environment and working directory',
+  agentRuntime: 'Agent Runtime',
+  agentRuntimeDescription: 'The AI agent that executes tasks',
+  runtimeClaudeCode: 'Claude Code',
+  runtimeClaudeCodeDescription: 'Powered by Claude Code to orchestrate tasks',
+  installClaudeCode: 'Claude Code not installed',
+  installClaudeCodeHint: 'Run: npm install -g @anthropic-ai/claude-code',
+
+  // Code Environment
+  codeEnvironment: 'Code Environment',
+  codeEnvironmentDescription: 'Where code and scripts are executed',
+  envLocal: 'Local',
+  envLocalDescription: 'Run on your machine',
+  envCodexSandbox: 'Codex Sandbox',
+  envCodexSandboxDescription: 'Run in isolated sandbox',
+  installNode: 'Node.js not installed',
+  installNodeHint: 'Visit: https://nodejs.org',
+  installPython: 'Python not installed',
+  installPythonHint: 'Visit: https://python.org',
+  installCodex: 'Codex CLI not installed',
+  installCodexHint: 'Run: npm install -g @openai/codex',
+
+  workingDirectory: 'Working Directory',
+  workingDirectoryDescription:
+    'All session outputs and files will be saved in this directory. Each conversation creates a subfolder under sessions/.',
+  directoryStructure: 'Structure: {path}/sessions/[task-id]/',
+
+  // Sandbox (legacy)
+  sandbox: 'Sandbox Mode',
+  sandboxDescription:
+    'Run scripts in isolated containers for better security and dependency management',
+  sandboxAutoDetect:
+    'Container runtime will be automatically selected based on script type (Node.js, Python, Bun, etc.)',
+
+  // Model / Provider
+  modelSettings: 'Model Settings',
+  modelDescription: 'Configure default model and providers',
+  defaultModel: 'Default Model',
+  defaultModelDescription: 'The model used for AI conversations',
+  providers: 'Providers',
+  defaultEnv: 'Default (Environment)',
+  useEnvModel: 'Use environment variables',
+  envHint:
+    'Using ANTHROPIC_API_KEY and ANTHROPIC_MODEL from server environment',
+  apiKey: 'API Key',
+  enterApiKey: 'Enter your API key',
+  getApiKey: 'Get API Key',
+  baseUrl: 'Base URL',
+  apiBaseUrl: 'API base URL',
+  availableModels: 'Available Models',
+  configured: 'Configured',
+  notConfigured: 'Not Configured',
+  addProvider: 'Add Provider',
+  deleteProvider: 'Delete Provider',
+  providerName: 'Name',
+  models: 'Models (comma separated)',
+  modelsHint: '(comma separated)',
+  add: 'Add',
+  custom: 'Custom',
+  authMethod: 'Auth Method',
+  selectProvider: 'Select a provider to configure',
+
+  // Skills
+  skills: 'Skills',
+  skillsSettings: 'Skill Settings',
+  skillsDescription: 'Configure skill definitions for extended capabilities',
+  skillsEnabled: 'Enable Skills',
+  skillsEnabledDescription: 'Load skills during agent conversations',
+  skillsList: 'Skills',
+  skillsEmpty: 'No skills found',
+  skillsAdd: 'Add Skill',
+  skillsDelete: 'Delete Skill',
+  skillsName: 'Skill Name',
+  skillsSource: 'Source Directory',
+  skillsFiles: 'Files',
+  skillsNoFiles: 'No files',
+  skillsSelect: 'Select a skill to view details',
+  skillsOpenFolder: 'Open in Finder',
+
+  // MCP
+  mcpSettings: 'MCP Settings',
+  mcpDescription: 'Configure Model Context Protocol servers',
+  mcpEnabled: 'Enable MCP',
+  mcpEnabledDescription: 'Mount MCP servers during agent conversations',
+  mcpConfigPath: 'Config File Path',
+  mcpConfigPathDescription: 'Path to mcp.json configuration file',
+  mcpServers: 'Servers',
+  mcpType: 'Type',
+  mcpTypeStdio: 'Stdio Command',
+  mcpTypeHttp: 'HTTP Request',
+  mcpName: 'Name',
+  mcpNameHint: 'Help identify the tool',
+  mcpId: 'ID',
+  mcpIdHint: 'Unique ID for model, cannot be duplicated',
+  mcpCommand: 'Command',
+  mcpArgs: 'Arguments',
+  mcpUrl: 'URL',
+  mcpAutoExecute: 'Auto Execute Tools',
+  mcpHeaders: 'HTTP Headers',
+  mcpAddHeader: 'Add Header',
+  mcpVerify: 'Verify (View Tools)',
+  mcpAddServer: 'Add Server',
+  mcpDeleteServer: 'Delete Server',
+  mcpSelectServer: 'Select a server to configure',
+  mcpNoServers: 'No MCP servers configured',
+  mcpLoadError: 'Failed to load MCP config',
+
+  // Connector
+  connectorDescription:
+    'Configure Skills and MCP servers for extended capabilities',
+  skillsPath: 'Skills Path',
+  skillsPathDescription:
+    'Directory containing skill definition files (.md files)',
+  mcpConfig: 'MCP Config',
+  mcpConfigDescription: 'Path to MCP servers configuration file (JSON format)',
+  mcpConfigExample: 'Example mcp.json format:',
+
+  // About
+  aiPlatform: 'Desktop Universal Agent',
+  version: 'Version',
+  build: 'Build',
+  author: 'Author',
+  copyright: 'Copyright',
+  license: 'License',
+  website: 'Website',
+  reportIssue: 'Report Issue',
+  builtWith: 'Some components built with',
+  built: '',
+};

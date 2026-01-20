@@ -19,6 +19,13 @@
     "fs:scope-home-recursive",
     "fs:allow-temp-read-recursive",
     "fs:scope-temp-recursive",
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        "$HOME/.workany/**",
+        "$HOME/.claude/**"
+      ]
+    },
     "shell:allow-spawn",
     "shell:allow-kill",
     {

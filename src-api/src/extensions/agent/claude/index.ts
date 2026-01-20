@@ -6,7 +6,7 @@
 
 import { execSync } from 'child_process';
 import { existsSync } from 'fs';
-import { mkdir } from 'fs/promises';
+import { mkdir, writeFile } from 'fs/promises';
 import { homedir, platform } from 'os';
 import { join } from 'path';
 import {
@@ -36,6 +36,7 @@ import type {
   AgentOptions,
   AgentProvider,
   ExecuteOptions,
+  ImageAttachment,
   PlanOptions,
 } from '@/core/agent/types';
 import {
@@ -90,18 +91,52 @@ async function installClaudeCode(): Promise<boolean> {
 }
 
 /**
+ * Build extended PATH that includes common package manager bin locations
+ */
+function getExtendedPath(): string {
+  const home = homedir();
+  const paths = [
+    process.env.PATH || '',
+    '/usr/local/bin',
+    '/opt/homebrew/bin',
+    `${home}/.local/bin`,
+    `${home}/.npm-global/bin`,
+    `${home}/.volta/bin`,
+    `${home}/code/node/npm_global/bin`,
+  ];
+
+  // Add nvm paths
+  const nvmDir = join(home, '.nvm', 'versions', 'node');
+  try {
+    const { readdirSync } = require('fs');
+    if (existsSync(nvmDir)) {
+      const versions = readdirSync(nvmDir);
+      for (const version of versions) {
+        paths.push(join(nvmDir, version, 'bin'));
+      }
+    }
+  } catch {
+    // nvm not installed
+  }
+
+  return paths.join(':');
+}
+
+/**
  * Get the path to the claude-code executable.
  * Only uses user-installed Claude Code (no bundled version).
  */
 function getClaudeCodePath(): string | undefined {
   const os = platform();
+  const extendedEnv = { ...process.env, PATH: getExtendedPath() };
 
-  // Priority 1: Check for user-installed Claude Code via 'which'/'where'
+  // Priority 1: Check for user-installed Claude Code via 'which'/'where' with extended PATH
   try {
     if (os === 'win32') {
       const whereResult = execSync('where claude', {
         encoding: 'utf-8',
         stdio: 'pipe',
+        env: extendedEnv,
       }).trim();
       const firstPath = whereResult.split('\n')[0];
       if (firstPath && existsSync(firstPath)) {
@@ -111,9 +146,43 @@ function getClaudeCodePath(): string | undefined {
         return firstPath;
       }
     } else {
+      // Try with login shell to get user's PATH
+      try {
+        const shellWhichResult = execSync('bash -l -c "which claude"', {
+          encoding: 'utf-8',
+          stdio: 'pipe',
+          env: extendedEnv,
+        }).trim();
+        if (shellWhichResult && existsSync(shellWhichResult)) {
+          console.log(
+            `[Claude] Found user-installed Claude Code at: ${shellWhichResult}`
+          );
+          return shellWhichResult;
+        }
+      } catch {
+        // Try zsh if bash fails
+        try {
+          const zshWhichResult = execSync('zsh -l -c "which claude"', {
+            encoding: 'utf-8',
+            stdio: 'pipe',
+            env: extendedEnv,
+          }).trim();
+          if (zshWhichResult && existsSync(zshWhichResult)) {
+            console.log(
+              `[Claude] Found user-installed Claude Code at: ${zshWhichResult}`
+            );
+            return zshWhichResult;
+          }
+        } catch {
+          // Fall through to other checks
+        }
+      }
+
+      // Fallback: simple which with extended PATH
       const whichResult = execSync('which claude', {
         encoding: 'utf-8',
         stdio: 'pipe',
+        env: extendedEnv,
       }).trim();
       if (whichResult && existsSync(whichResult)) {
         console.log(
@@ -126,26 +195,58 @@ function getClaudeCodePath(): string | undefined {
     // 'which claude' failed, user doesn't have claude installed globally
   }
 
-  // Priority 2: Check common install locations
+  // Priority 2: Try to get npm global bin path dynamically
+  try {
+    const npmPrefix = execSync('npm config get prefix', {
+      encoding: 'utf-8',
+      stdio: 'pipe',
+      env: extendedEnv,
+    }).trim();
+    if (npmPrefix) {
+      const npmBinPath = join(npmPrefix, 'bin', 'claude');
+      if (existsSync(npmBinPath)) {
+        console.log(`[Claude] Found Claude Code at npm global: ${npmBinPath}`);
+        return npmBinPath;
+      }
+    }
+  } catch {
+    // npm not available
+  }
+
+  // Priority 3: Check common install locations
+  const home = homedir();
   const commonPaths =
     os === 'win32'
       ? [
-          join(
-            homedir(),
-            'AppData',
-            'Local',
-            'Programs',
-            'claude',
-            'claude.exe'
-          ),
-          join(homedir(), 'AppData', 'Roaming', 'npm', 'claude.cmd'),
+          join(home, 'AppData', 'Local', 'Programs', 'claude', 'claude.exe'),
+          join(home, 'AppData', 'Roaming', 'npm', 'claude.cmd'),
         ]
       : [
           '/usr/local/bin/claude',
           '/opt/homebrew/bin/claude',
-          join(homedir(), '.local', 'bin', 'claude'),
-          join(homedir(), '.npm-global', 'bin', 'claude'),
+          join(home, '.local', 'bin', 'claude'),
+          join(home, '.npm-global', 'bin', 'claude'),
+          join(home, '.volta', 'bin', 'claude'), // Volta
+          join(home, 'code', 'node', 'npm_global', 'bin', 'claude'), // Custom npm global path
         ];
+
+  // Priority 3.5: Also check nvm paths (dynamically find node versions)
+  if (os !== 'win32') {
+    const nvmDir = join(home, '.nvm', 'versions', 'node');
+    try {
+      const { readdirSync } = require('fs');
+      const versions = readdirSync(nvmDir);
+      for (const version of versions) {
+        const nvmPath = join(nvmDir, version, 'bin', 'claude');
+        if (existsSync(nvmPath)) {
+          console.log(`[Claude] Found Claude Code at nvm path: ${nvmPath}`);
+          return nvmPath;
+        }
+      }
+    } catch {
+      // nvm not installed or no versions
+    }
+  }
 
   for (const p of commonPaths) {
     if (existsSync(p)) {
@@ -154,7 +255,7 @@ function getClaudeCodePath(): string | undefined {
     }
   }
 
-  // Priority 3: Check if CLAUDE_CODE_PATH env var is set
+  // Priority 4: Check if CLAUDE_CODE_PATH env var is set
   if (
     process.env.CLAUDE_CODE_PATH &&
     existsSync(process.env.CLAUDE_CODE_PATH)
@@ -281,6 +382,40 @@ async function getSessionWorkDir(
   }
 
   return targetDir;
+}
+
+/**
+ * Save images to disk and return file paths
+ */
+async function saveImagesToDisk(
+  images: ImageAttachment[],
+  workDir: string
+): Promise<string[]> {
+  const savedPaths: string[] = [];
+
+  for (let i = 0; i < images.length; i++) {
+    const image = images[i];
+    const ext = image.mimeType.split('/')[1] || 'png';
+    const filename = `image_${Date.now()}_${i}.${ext}`;
+    const filePath = join(workDir, filename);
+
+    try {
+      // Remove data URL prefix if present (e.g., "data:image/png;base64,")
+      let base64Data = image.data;
+      if (base64Data.includes(',')) {
+        base64Data = base64Data.split(',')[1];
+      }
+
+      const buffer = Buffer.from(base64Data, 'base64');
+      await writeFile(filePath, buffer);
+      savedPaths.push(filePath);
+      console.log(`[Claude] Saved image to: ${filePath}`);
+    } catch (error) {
+      console.error(`[Claude] Failed to save image: ${error}`);
+    }
+  }
+
+  return savedPaths;
 }
 
 /**
@@ -546,9 +681,13 @@ export class ClaudeAgent extends BaseAgent {
   /**
    * Build environment variables for the SDK query
    * Supports custom API endpoint and API key
+   * Also includes extended PATH for packaged app compatibility
    */
   private buildEnvConfig(): Record<string, string | undefined> {
     const env: Record<string, string | undefined> = { ...process.env };
+
+    // Extend PATH for packaged app to find node and other binaries
+    env.PATH = getExtendedPath();
 
     // Override with config values if provided
     if (this.config.apiKey) {
@@ -594,9 +733,19 @@ export class ClaudeAgent extends BaseAgent {
         }
       : undefined;
 
+    // Handle image attachments - save to disk and reference in prompt
+    let imageInstruction = '';
+    if (options?.images && options.images.length > 0) {
+      console.log(`[Claude ${session.id}] Processing ${options.images.length} image(s)`);
+      const imagePaths = await saveImagesToDisk(options.images, sessionCwd);
+      if (imagePaths.length > 0) {
+        imageInstruction = `\n\n## Attached Images\nThe user has attached the following image(s) for you to analyze:\n${imagePaths.map((p, i) => `- Image ${i + 1}: ${p}`).join('\n')}\n\nPlease use the Read tool to view these images and incorporate them into your response.\n\n`;
+      }
+    }
+
     // Add workspace instruction to prompt so skills know where to save files
     const enhancedPrompt =
-      getWorkspaceInstruction(sessionCwd, sandboxOpts) + prompt;
+      getWorkspaceInstruction(sessionCwd, sandboxOpts) + imageInstruction + prompt;
 
     // Ensure Claude Code is installed
     const claudeCodePath = await ensureClaudeCode();

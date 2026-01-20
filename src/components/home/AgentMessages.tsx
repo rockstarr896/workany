@@ -1,4 +1,5 @@
 import type { AgentMessage } from '@/shared/hooks/useAgent';
+import { useLanguage } from '@/shared/providers/language-provider';
 import {
   AlertCircle,
   CheckCircle,
@@ -32,6 +33,8 @@ function getToolIcon(toolName: string) {
 }
 
 export function AgentMessages({ messages, isRunning }: AgentMessagesProps) {
+  const { t } = useLanguage();
+
   if (messages.length === 0 && !isRunning) {
     return null;
   }
@@ -89,7 +92,7 @@ export function AgentMessages({ messages, isRunning }: AgentMessagesProps) {
       {isRunning && (
         <div className="text-muted-foreground flex items-center gap-2 text-sm">
           <div className="bg-primary size-2 animate-pulse rounded-full" />
-          <span>Agent 正在思考...</span>
+          <span>{t.task.thinking}</span>
         </div>
       )}
     </div>

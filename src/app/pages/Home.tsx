@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { createSession, getAllTasks, type Task } from '@/shared/db';
 import { generateSessionId } from '@/shared/lib/session';
 import { cn } from '@/shared/lib/utils';
+import { useLanguage } from '@/shared/providers/language-provider';
 import { ArrowUp, FileText, Paperclip, Plus, X } from 'lucide-react';
 import {
   DropdownMenu,
@@ -30,6 +31,7 @@ export function HomePage() {
 }
 
 function HomeContent() {
+  const { t } = useLanguage();
   const [value, setValue] = useState('');
   const [tasks, setTasks] = useState<Task[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -179,7 +181,7 @@ function HomeContent() {
           <div className="flex w-full max-w-2xl flex-col items-center gap-6">
             {/* Title */}
             <h1 className="text-foreground text-center font-serif text-4xl font-normal tracking-tight md:text-5xl">
-              What can I do for you?
+              {t.home.welcomeTitle}
             </h1>
 
             {/* Input Box */}
@@ -235,7 +237,7 @@ function HomeContent() {
                   onChange={(e) => setValue(e.target.value)}
                   onKeyDown={handleKeyDown}
                   onPaste={handlePaste}
-                  placeholder="Assign a task or ask anything..."
+                  placeholder={t.home.inputPlaceholder}
                   className="text-foreground placeholder:text-muted-foreground min-h-[72px] w-full resize-none border-0 bg-transparent text-base focus:outline-none"
                   rows={2}
                 />

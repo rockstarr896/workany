@@ -57,6 +57,14 @@ export interface ConversationMessage {
   content: string;
 }
 
+/**
+ * Image attachment for vision capabilities
+ */
+export interface ImageAttachment {
+  data: string; // Base64 encoded image data
+  mimeType: string; // e.g., 'image/png', 'image/jpeg'
+}
+
 // ============================================================================
 // Plan Types
 // ============================================================================
@@ -113,6 +121,8 @@ export interface AgentOptions {
   permissionMode?: 'plan' | 'execute' | 'bypassPermissions';
   /** Sandbox configuration for isolated execution */
   sandbox?: SandboxConfig;
+  /** Image attachments for vision capabilities */
+  images?: ImageAttachment[];
 }
 
 export interface PlanOptions extends AgentOptions {

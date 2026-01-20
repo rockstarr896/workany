@@ -42,6 +42,7 @@ export interface Message {
   tool_use_id: string | null;
   subtype: string | null;
   error_message: string | null;
+  attachments: string | null; // JSON string of MessageAttachment[]
   created_at: string;
 }
 
@@ -68,6 +69,7 @@ export interface CreateMessageInput {
   tool_use_id?: string;
   subtype?: string;
   error_message?: string;
+  attachments?: string; // JSON string of MessageAttachment[]
 }
 
 export interface UpdateTaskInput {

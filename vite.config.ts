@@ -5,9 +5,16 @@ import path from "path";
 
 const host = process.env.TAURI_DEV_HOST;
 
+// Generate build date in YYYY.MM.DD format
+const buildDate = new Date().toISOString().slice(0, 10).replace(/-/g, '.');
+
 // https://vite.dev/config/
 export default defineConfig(async () => ({
   plugins: [react(), tailwindcss()],
+
+  define: {
+    __BUILD_DATE__: JSON.stringify(buildDate),
+  },
 
   resolve: {
     alias: {

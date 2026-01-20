@@ -21,7 +21,7 @@ import {
   User,
 } from 'lucide-react';
 
-import { SettingsModal } from '@/components/settings-modal';
+import { SettingsModal } from '@/components/settings';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -307,7 +307,10 @@ export function LeftSidebar({ tasks, currentTaskId }: LeftSidebarProps) {
 
                 {/* Tasks Popup Panel */}
                 {showTasksPopup && (
-                  <div className="bg-background border-border/60 absolute top-0 left-full z-50 ml-2 max-h-[70vh] w-80 overflow-hidden rounded-xl border shadow-xl">
+                  <>
+                    {/* Invisible bridge to prevent losing hover when moving to popup */}
+                    <div className="absolute top-0 left-full z-50 h-full w-3" />
+                    <div className="bg-background border-border/60 absolute top-0 left-full z-50 ml-2 max-h-[70vh] w-80 overflow-hidden rounded-xl border shadow-xl">
                     {/* Popup Header */}
                     <div className="border-border/50 bg-muted/30 border-b px-4 py-3">
                       <h3 className="text-foreground text-sm font-medium">
@@ -357,6 +360,7 @@ export function LeftSidebar({ tasks, currentTaskId }: LeftSidebarProps) {
                       )}
                     </div>
                   </div>
+                  </>
                 )}
               </div>
             </div>

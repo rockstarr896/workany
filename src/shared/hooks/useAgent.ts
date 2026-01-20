@@ -113,6 +113,15 @@ export interface PendingQuestion {
   questions: AgentQuestion[];
 }
 
+// Attachment type for messages with images/files
+export interface MessageAttachment {
+  id: string;
+  type: 'image' | 'file';
+  name: string;
+  data: string; // Base64 data for images
+  mimeType?: string;
+}
+
 export interface AgentMessage {
   type:
     | 'text'
@@ -143,6 +152,8 @@ export interface AgentMessage {
   isError?: boolean;
   // Plan fields
   plan?: TaskPlan;
+  // Attachments for user messages (images, files)
+  attachments?: MessageAttachment[];
 }
 
 export interface PlanStep {
@@ -192,11 +203,12 @@ export interface UseAgentReturn {
   runAgent: (
     prompt: string,
     existingTaskId?: string,
-    sessionInfo?: SessionInfo
+    sessionInfo?: SessionInfo,
+    attachments?: MessageAttachment[]
   ) => Promise<string>;
   approvePlan: () => Promise<void>;
   rejectPlan: () => void;
-  continueConversation: (reply: string) => Promise<void>;
+  continueConversation: (reply: string, attachments?: MessageAttachment[]) => Promise<void>;
   stopAgent: () => Promise<void>;
   clearMessages: () => void;
   loadTask: (taskId: string) => Promise<Task | null>;
@@ -634,7 +646,20 @@ export function useAgent(): UseAgentReturn {
       const dbMessages = await getMessagesByTaskId(id);
       const agentMessages: AgentMessage[] = dbMessages.map((msg: Message) => {
         if (msg.type === 'user') {
-          return { type: 'user' as const, content: msg.content || undefined };
+          // Parse attachments if present
+          let attachments: MessageAttachment[] | undefined;
+          if (msg.attachments) {
+            try {
+              attachments = JSON.parse(msg.attachments);
+            } catch {
+              // Ignore parse errors
+            }
+          }
+          return {
+            type: 'user' as const,
+            content: msg.content || undefined,
+            attachments,
+          };
         } else if (msg.type === 'text') {
           return { type: 'text' as const, content: msg.content || undefined };
         } else if (msg.type === 'tool_use') {
@@ -882,7 +907,8 @@ export function useAgent(): UseAgentReturn {
     async (
       prompt: string,
       existingTaskId?: string,
-      sessionInfo?: SessionInfo
+      sessionInfo?: SessionInfo,
+      attachments?: MessageAttachment[]
     ): Promise<string> => {
       if (isRunning) return existingTaskId || '';
 
@@ -950,15 +976,95 @@ export function useAgent(): UseAgentReturn {
       const abortController = new AbortController();
       abortControllerRef.current = abortController;
 
+      // Prepare images for API (only send image attachments with actual data)
+      const images = attachments
+        ?.filter((a) => a.type === 'image' && a.data && a.data.length > 0)
+        .map((a) => ({
+          data: a.data,
+          mimeType: a.mimeType || 'image/png',
+        }));
+
+      const hasImages = images && images.length > 0;
+
+      // Debug logging for image attachments
+      if (attachments && attachments.length > 0) {
+        console.log('[useAgent] Attachments received:', attachments.length);
+        attachments.forEach((a, i) => {
+          console.log(`[useAgent] Attachment ${i}: type=${a.type}, hasData=${!!a.data}, dataLength=${a.data?.length || 0}`);
+        });
+        console.log('[useAgent] Valid images for API:', images?.length || 0);
+      }
+
       try {
-        // Phase 1: Request planning
         const modelConfig = getModelConfig();
+
+        // If images are attached, use direct execution (skip planning)
+        // because images need to be processed during execution, not planning
+        if (hasImages) {
+          console.log('[useAgent] Images attached, using direct execution');
+          setPhase('executing');
+
+          // Add user message with attachments to UI
+          const userMessage: AgentMessage = {
+            type: 'user',
+            content: prompt,
+            attachments: attachments,
+          };
+          setMessages([userMessage]);
+
+          // Save user message to database (with attachments if any)
+          try {
+            await createMessage({
+              task_id: currentTaskId,
+              type: 'user',
+              content: prompt,
+              attachments: attachments && attachments.length > 0
+                ? JSON.stringify(attachments)
+                : undefined,
+            });
+          } catch (error) {
+            console.error('Failed to save user message:', error);
+          }
+
+          // Use session folder as workDir
+          const workDir = computedSessionFolder || (await getAppDataDir());
+          const sandboxConfig = getSandboxConfig();
+
+          // Use direct execution endpoint with images
+          const response = await fetch(`${AGENT_SERVER_URL}/agent`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              prompt,
+              workDir,
+              taskId: currentTaskId,
+              modelConfig,
+              sandboxConfig,
+              images,
+            }),
+            signal: abortController.signal,
+          });
+
+          if (!response.ok) {
+            throw new Error(`Server error: ${response.status}`);
+          }
+
+          await processStream(response, currentTaskId, abortController);
+          return currentTaskId;
+        }
+
+        // Phase 1: Request planning (no images)
         const response = await fetch(`${AGENT_SERVER_URL}/agent/plan`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ prompt, modelConfig }),
+          body: JSON.stringify({
+            prompt,
+            modelConfig,
+          }),
           signal: abortController.signal,
         });
 
@@ -1074,7 +1180,7 @@ export function useAgent(): UseAgentReturn {
 
       return currentTaskId;
     },
-    [isRunning]
+    [isRunning, processStream]
   );
 
   // Phase 2: Execute the approved plan
@@ -1163,19 +1269,26 @@ export function useAgent(): UseAgentReturn {
 
   // Continue conversation with context
   const continueConversation = useCallback(
-    async (reply: string): Promise<void> => {
+    async (reply: string, attachments?: MessageAttachment[]): Promise<void> => {
       if (isRunning || !taskId) return;
 
-      // Add user message to UI immediately
-      const userMessage: AgentMessage = { type: 'user', content: reply };
+      // Add user message to UI immediately (with attachments if any)
+      const userMessage: AgentMessage = {
+        type: 'user',
+        content: reply,
+        attachments: attachments && attachments.length > 0 ? attachments : undefined,
+      };
       setMessages((prev) => [...prev, userMessage]);
 
-      // Save user message to database
+      // Save user message to database (with attachments if any)
       try {
         await createMessage({
           task_id: taskId,
           type: 'user',
           content: reply,
+          attachments: attachments && attachments.length > 0
+            ? JSON.stringify(attachments)
+            : undefined,
         });
       } catch (error) {
         console.error('Failed to save user message:', error);
@@ -1205,6 +1318,14 @@ export function useAgent(): UseAgentReturn {
         const modelConfig = getModelConfig();
         const sandboxConfig = getSandboxConfig();
 
+        // Prepare images for API (only send image attachments)
+        const images = attachments
+          ?.filter((a) => a.type === 'image')
+          .map((a) => ({
+            data: a.data,
+            mimeType: a.mimeType || 'image/png',
+          }));
+
         // Send conversation with full history
         const response = await fetch(`${AGENT_SERVER_URL}/agent`, {
           method: 'POST',
@@ -1218,6 +1339,7 @@ export function useAgent(): UseAgentReturn {
             taskId,
             modelConfig,
             sandboxConfig,
+            images: images && images.length > 0 ? images : undefined,
           }),
           signal: abortController.signal,
         });

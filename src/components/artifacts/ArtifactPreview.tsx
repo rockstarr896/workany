@@ -1,362 +1,43 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { PreviewStatus } from '@/shared/hooks/useVitePreview';
 import { cn } from '@/shared/lib/utils';
 import { useLanguage } from '@/shared/providers/language-provider';
-import { useTheme } from '@/shared/providers/theme-provider';
-import { readFile } from '@tauri-apps/plugin-fs';
 import {
   Check,
   Code,
   Copy,
-  Download,
+  ExternalLink,
   Eye,
-  FileSpreadsheet,
+  FileCode2,
   FileText,
-  Loader2,
   Maximize2,
-  Monitor,
-  Presentation,
   Radio,
-  RefreshCw,
   X,
 } from 'lucide-react';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import {
-  oneDark,
-  oneLight,
-} from 'react-syntax-highlighter/dist/esm/styles/prism';
-
-import type { Artifact } from './RightSidebar';
-import { VitePreview } from './VitePreview';
-
-interface ArtifactPreviewProps {
-  artifact: Artifact | null;
-  onClose?: () => void;
-  // All artifacts for resolving relative imports
-  allArtifacts?: Artifact[];
-  // Live preview props
-  livePreviewUrl?: string | null;
-  livePreviewStatus?: PreviewStatus;
-  livePreviewError?: string | null;
-  onStartLivePreview?: () => void;
-  onStopLivePreview?: () => void;
-}
-
-type PreviewMode = 'static' | 'live';
-
-type ViewMode = 'preview' | 'code';
-
-// Get file extension from artifact name
-function getFileExtension(name: string): string {
-  return name.split('.').pop()?.toLowerCase() || '';
-}
-
-// Get language hint for syntax highlighting
-function getLanguageHint(artifact: Artifact): string {
-  const ext = getFileExtension(artifact.name);
-  const langMap: Record<string, string> = {
-    js: 'javascript',
-    jsx: 'javascript',
-    ts: 'typescript',
-    tsx: 'typescript',
-    py: 'python',
-    rb: 'ruby',
-    go: 'go',
-    rs: 'rust',
-    java: 'java',
-    cpp: 'cpp',
-    c: 'c',
-    h: 'c',
-    hpp: 'cpp',
-    css: 'css',
-    scss: 'scss',
-    less: 'less',
-    html: 'html',
-    htm: 'html',
-    json: 'json',
-    xml: 'xml',
-    yaml: 'yaml',
-    yml: 'yaml',
-    md: 'markdown',
-    sql: 'sql',
-    sh: 'bash',
-    bash: 'bash',
-    zsh: 'bash',
-    toml: 'toml',
-  };
-  return langMap[ext] || 'plaintext';
-}
-
-// Get app name for "Open with" button based on file type
-function getOpenWithApp(
-  artifact: Artifact
-): { name: string; icon: typeof Monitor } | null {
-  switch (artifact.type) {
-    case 'html':
-      return { name: 'Google Chrome', icon: Monitor };
-    case 'presentation':
-      return { name: 'Microsoft PowerPoint', icon: Presentation };
-    case 'document':
-      return { name: 'Microsoft Word', icon: FileText };
-    case 'spreadsheet':
-    case 'csv':
-      return { name: 'Microsoft Excel', icon: FileSpreadsheet };
-    case 'pdf':
-      return { name: 'Preview', icon: FileText };
-    default:
-      return null;
-  }
-}
-
-// Parse CSV content to 2D array
-function parseCSV(content: string): string[][] {
-  const lines = content.trim().split('\n');
-  return lines.map((line) => {
-    const cells: string[] = [];
-    let current = '';
-    let inQuotes = false;
-
-    for (let i = 0; i < line.length; i++) {
-      const char = line[i];
-      if (char === '"') {
-        inQuotes = !inQuotes;
-      } else if (char === ',' && !inQuotes) {
-        cells.push(current.trim());
-        current = '';
-      } else {
-        current += char;
-      }
-    }
-    cells.push(current.trim());
-    return cells;
-  });
-}
-
-// Simple markdown to HTML converter
-function markdownToHtml(markdown: string): string {
-  let html = markdown;
-
-  // Escape HTML
-  html = html
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-
-  // Headers
-  html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
-  html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>');
-  html = html.replace(/^# (.*$)/gim, '<h1>$1</h1>');
-
-  // Bold and italic
-  html = html.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
-  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-  html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
-  html = html.replace(/___(.+?)___/g, '<strong><em>$1</em></strong>');
-  html = html.replace(/__(.+?)__/g, '<strong>$1</strong>');
-  html = html.replace(/_(.+?)_/g, '<em>$1</em>');
-
-  // Inline code
-  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
-
-  // Code blocks
-  html = html.replace(/```[\w]*\n([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
-
-  // Links
-  html = html.replace(
-    /\[([^\]]+)\]\(([^)]+)\)/g,
-    '<a href="$2" target="_blank" rel="noopener">$1</a>'
-  );
-
-  // Images
-  html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" />');
-
-  // Blockquotes
-  html = html.replace(/^\> (.*$)/gim, '<blockquote>$1</blockquote>');
-
-  // Unordered lists
-  html = html.replace(/^\s*[-*+] (.*$)/gim, '<li>$1</li>');
-
-  // Ordered lists
-  html = html.replace(/^\s*\d+\. (.*$)/gim, '<li>$1</li>');
-
-  // Wrap consecutive list items
-  html = html.replace(/(<li>.*<\/li>\n?)+/g, (match) => `<ul>${match}</ul>`);
-
-  // Horizontal rules
-  html = html.replace(/^[-*_]{3,}$/gim, '<hr />');
-
-  // Paragraphs
-  html = html.replace(/\n\n+/g, '</p><p>');
-  html = `<p>${html}</p>`;
-  html = html.replace(/<p><\/p>/g, '');
-  html = html.replace(/<p>(<h[1-6]>)/g, '$1');
-  html = html.replace(/(<\/h[1-6]>)<\/p>/g, '$1');
-  html = html.replace(/<p>(<pre>)/g, '$1');
-  html = html.replace(/(<\/pre>)<\/p>/g, '$1');
-  html = html.replace(/<p>(<ul>)/g, '$1');
-  html = html.replace(/(<\/ul>)<\/p>/g, '$1');
-  html = html.replace(/<p>(<blockquote>)/g, '$1');
-  html = html.replace(/(<\/blockquote>)<\/p>/g, '$1');
-  html = html.replace(/<p>(<hr \/>)/g, '$1');
-
-  return html;
-}
-
-// Check if a path is a URL (remote file)
-function isRemoteUrl(path: string): boolean {
-  return (
-    path.startsWith('http://') ||
-    path.startsWith('https://') ||
-    path.startsWith('//')
-  );
-}
-
-// PDF Preview Component with async file loading
-function PdfPreviewContent({ artifact }: { artifact: Artifact }) {
-  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let blobUrl: string | null = null;
-
-    async function loadPdf() {
-      if (!artifact.path) {
-        setError('No PDF file path available');
-        setLoading(false);
-        return;
-      }
-
-      console.log('[PDF Preview] Loading PDF from path:', artifact.path);
-
-      try {
-        let blob: Blob;
-
-        if (isRemoteUrl(artifact.path)) {
-          // Remote URL - fetch the PDF
-          console.log('[PDF Preview] Fetching remote PDF...');
-          const url = artifact.path.startsWith('//')
-            ? `https:${artifact.path}`
-            : artifact.path;
-          const response = await fetch(url);
-          if (!response.ok) {
-            throw new Error(
-              `Failed to fetch PDF: ${response.status} ${response.statusText}`
-            );
-          }
-          blob = await response.blob();
-        } else {
-          // Local file - use Tauri fs plugin
-          console.log('[PDF Preview] Reading local PDF file...');
-          const data = await readFile(artifact.path);
-          blob = new Blob([data], { type: 'application/pdf' });
-        }
-
-        console.log('[PDF Preview] Loaded', blob.size, 'bytes');
-        blobUrl = URL.createObjectURL(blob);
-        setPdfUrl(blobUrl);
-        setError(null);
-      } catch (err) {
-        console.error('[PDF Preview] Failed to load PDF:', err);
-        const errorMsg = err instanceof Error ? err.message : String(err);
-        setError(errorMsg);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    loadPdf();
-
-    // Cleanup blob URL on unmount
-    return () => {
-      if (blobUrl) {
-        URL.revokeObjectURL(blobUrl);
-      }
-    };
-  }, [artifact.path]);
-
-  if (loading) {
-    return (
-      <div className="bg-muted/20 flex h-full flex-col items-center justify-center p-8">
-        <Loader2 className="text-muted-foreground size-8 animate-spin" />
-        <p className="text-muted-foreground mt-4 text-sm">Loading PDF...</p>
-      </div>
-    );
-  }
-
-  if (error || !pdfUrl) {
-    return (
-      <div className="bg-muted/20 flex h-full flex-col items-center justify-center p-8">
-        <div className="flex max-w-md flex-col items-center text-center">
-          <div className="border-border bg-background mb-4 flex size-20 items-center justify-center rounded-xl border">
-            <FileText className="size-10 text-red-500" />
-          </div>
-          <h3 className="text-foreground mb-2 text-lg font-medium">
-            {artifact.name}
-          </h3>
-          <p className="text-muted-foreground text-sm break-all whitespace-pre-wrap">
-            {error || 'No PDF file path available'}
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="bg-muted/20 h-full">
-      <iframe
-        src={pdfUrl}
-        className="h-full w-full border-0"
-        title={artifact.name}
-      />
-    </div>
-  );
-}
-
-// Inline CSS and JS into HTML content
-function inlineAssets(html: string, allArtifacts: Artifact[]): string {
-  let result = html;
-
-  // Find and inline CSS files
-  // Match <link rel="stylesheet" href="filename.css"> or <link href="filename.css" rel="stylesheet">
-  const cssRegex = /<link[^>]*href=["']([^"']+\.css)["'][^>]*>/gi;
-  result = result.replace(cssRegex, (match, filename) => {
-    // Only handle relative paths
-    if (filename.startsWith('http') || filename.startsWith('//')) return match;
-
-    // Find the CSS artifact
-    const cssArtifact = allArtifacts.find(
-      (a) => a.name === filename || a.name.endsWith(`/${filename}`)
-    );
-
-    if (cssArtifact?.content) {
-      console.log('[ArtifactPreview] Inlining CSS:', filename);
-      return `<style>/* Inlined from ${filename} */\n${cssArtifact.content}</style>`;
-    }
-    return match;
-  });
-
-  // Find and inline JS files
-  // Match <script src="filename.js"></script>
-  const jsRegex = /<script[^>]*src=["']([^"']+\.js)["'][^>]*><\/script>/gi;
-  result = result.replace(jsRegex, (match, filename) => {
-    // Only handle relative paths
-    if (filename.startsWith('http') || filename.startsWith('//')) return match;
-
-    // Find the JS artifact
-    const jsArtifact = allArtifacts.find(
-      (a) => a.name === filename || a.name.endsWith(`/${filename}`)
-    );
-
-    if (jsArtifact?.content) {
-      console.log('[ArtifactPreview] Inlining JS:', filename);
-      return `<script>/* Inlined from ${filename} */\n${jsArtifact.content}</script>`;
-    }
-    return match;
-  });
-
-  return result;
-}
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { VitePreview } from '@/components/task/VitePreview';
+import type { Artifact, ArtifactPreviewProps, PreviewMode, ViewMode } from './types';
+import { AudioPreview } from './AudioPreview';
+import { CodePreview } from './CodePreview';
+import { DocxPreview } from './DocxPreview';
+import { ExcelPreview } from './ExcelPreview';
+import { FileTooLarge } from './FileTooLarge';
+import { FontPreview } from './FontPreview';
+import { ImagePreview } from './ImagePreview';
+import { PdfPreview } from './PdfPreview';
+import { PptxPreview } from './PptxPreview';
+import { VideoPreview } from './VideoPreview';
+import {
+  getFileExtension,
+  getOpenWithApp,
+  inlineAssets,
+  markdownToHtml,
+  parseCSV,
+} from './utils';
 
 export function ArtifactPreview({
   artifact,
@@ -379,7 +60,6 @@ export function ArtifactPreview({
   // Check if live preview is available for this artifact
   const canUseLivePreview = useMemo(() => {
     if (!artifact) return false;
-    // Live preview is available for HTML artifacts when we have the handlers
     return artifact.type === 'html' && onStartLivePreview !== undefined;
   }, [artifact, onStartLivePreview]);
 
@@ -420,39 +100,72 @@ export function ArtifactPreview({
     }
   };
 
-  // Handle download
-  const handleDownload = () => {
-    if (!artifact?.content) return;
-    const blob = new Blob([artifact.content], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = artifact.name;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
+  // Handle open in external app via API
+  const handleOpenExternal = async () => {
+    if (!artifact) return;
 
-  // Handle open in external app
-  const handleOpenExternal = () => {
-    if (!artifact?.content) return;
+    if (artifact.path) {
+      try {
+        console.log('[ArtifactPreview] Opening file with system app:', artifact.path);
+        const API_PORT = import.meta.env.PROD ? 2620 : 2026;
+        const response = await fetch(`http://localhost:${API_PORT}/files/open`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: artifact.path }),
+        });
+        const result = await response.json();
+        if (!result.success) {
+          console.error('[ArtifactPreview] Failed to open file:', result.error);
+        }
+        return;
+      } catch (err) {
+        console.error('[ArtifactPreview] Failed to open file:', err);
+      }
+    }
 
-    if (artifact.type === 'html') {
+    // Fallback for HTML content without path
+    if (artifact.type === 'html' && artifact.content) {
       const blob = new Blob([artifact.content], { type: 'text/html' });
       const url = URL.createObjectURL(blob);
       window.open(url, '_blank');
     }
-    // For other file types, trigger download since we can't directly open desktop apps from browser
-    else {
-      handleDownload();
-    }
   };
 
-  // Handle refresh iframe
-  const handleRefresh = () => {
-    if (iframeRef.current) {
-      iframeRef.current.src = iframeRef.current.src;
+  // Check if artifact is a code file
+  const isCodeFile = useMemo(() => {
+    if (!artifact) return false;
+    const codeTypes = ['code', 'jsx', 'css', 'json', 'text', 'markdown'];
+    if (codeTypes.includes(artifact.type)) return true;
+    const ext = getFileExtension(artifact.name);
+    const codeExtensions = [
+      'js', 'jsx', 'ts', 'tsx', 'py', 'rb', 'go', 'rs', 'java', 'cpp', 'c', 'h', 'hpp',
+      'css', 'scss', 'less', 'html', 'htm', 'json', 'xml', 'yaml', 'yml', 'md', 'sql',
+      'sh', 'bash', 'zsh', 'toml', 'ini', 'conf', 'env', 'gitignore', 'dockerfile',
+      'makefile', 'gradle', 'swift', 'kt', 'scala', 'php', 'vue', 'svelte'
+    ];
+    return codeExtensions.includes(ext);
+  }, [artifact]);
+
+  // Handle open in code editor via API
+  const handleOpenInEditor = async () => {
+    if (!artifact?.path) return;
+
+    try {
+      console.log('[ArtifactPreview] Opening in editor:', artifact.path);
+      const API_PORT = import.meta.env.PROD ? 2620 : 2026;
+      const response = await fetch(`http://localhost:${API_PORT}/files/open-in-editor`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: artifact.path }),
+      });
+      const result = await response.json();
+      if (result.success) {
+        console.log('[ArtifactPreview] Opened in', result.editor);
+      } else {
+        console.error('[ArtifactPreview] Failed to open in editor:', result.error);
+      }
+    } catch (err) {
+      console.error('[ArtifactPreview] Failed to open in editor:', err);
     }
   };
 
@@ -460,7 +173,6 @@ export function ArtifactPreview({
   const iframeSrc = useMemo(() => {
     if (!artifact?.content || artifact.type !== 'html') return null;
 
-    // Inline CSS and JS from other artifacts
     const enhancedHtml =
       allArtifacts.length > 0
         ? inlineAssets(artifact.content, allArtifacts)
@@ -508,24 +220,33 @@ export function ArtifactPreview({
       case 'html':
         return true;
       case 'image':
-        return !!artifact.content;
+        return !!artifact.content || !!artifact.path;
       case 'markdown':
         return !!artifact.content;
       case 'csv':
         return !!csvData;
+      case 'spreadsheet':
+        return !!artifact.path;
       case 'presentation':
-        return !!slides;
+        return !!artifact.path || !!slides;
       case 'pdf':
         return !!artifact.content || !!artifact.path;
+      case 'audio':
+        return !!artifact.content || !!artifact.path;
+      case 'video':
+        return !!artifact.content || !!artifact.path;
+      case 'font':
+        return !!artifact.path;
+      case 'document':
+        return !!artifact.path;
       default:
         return false;
     }
   }, [artifact, csvData, slides]);
 
-  // Check if code view is available (has text content)
+  // Check if code view is available
   const hasCodeView = useMemo(() => {
     if (!artifact) return false;
-    // Binary types don't have code view
     if (
       ['image', 'pdf', 'document', 'spreadsheet', 'presentation'].includes(
         artifact.type
@@ -572,9 +293,8 @@ export function ArtifactPreview({
         isFullscreen && 'fixed inset-0 z-50'
       )}
     >
-      {/* Header - Title on left, actions on right */}
+      {/* Header */}
       <div className="border-border/50 bg-muted/30 flex shrink-0 items-center justify-between border-b px-4 py-2">
-        {/* Left: File name and badge */}
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <span className="text-foreground truncate text-sm font-medium">
             {artifact.name}
@@ -584,59 +304,76 @@ export function ArtifactPreview({
           </span>
         </div>
 
-        {/* Right: Action buttons */}
-        <div className="flex shrink-0 items-center gap-1">
-          {/* Open with external app - prominent button */}
-          {openWithApp && (
-            <button
-              onClick={handleOpenExternal}
-              className="bg-accent/50 text-foreground hover:bg-accent flex cursor-pointer items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
-              title={`Open in ${openWithApp.name}`}
-            >
-              <openWithApp.icon className="size-4" />
-              <span className="hidden sm:inline">
-                Open in {openWithApp.name}
-              </span>
-            </button>
-          )}
+        <TooltipProvider delayDuration={300}>
+          <div className="flex shrink-0 items-center gap-1">
+            {openWithApp && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={handleOpenExternal}
+                    className="text-muted-foreground hover:bg-accent hover:text-foreground flex size-8 cursor-pointer items-center justify-center rounded-md transition-colors"
+                  >
+                    <ExternalLink className="size-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  <p>Open in {openWithApp.name}</p>
+                </TooltipContent>
+              </Tooltip>
+            )}
 
-          {/* Refresh - for HTML */}
-          {artifact.type === 'html' && (
-            <button
-              onClick={handleRefresh}
-              className="text-muted-foreground hover:bg-accent hover:text-foreground flex size-8 cursor-pointer items-center justify-center rounded-md transition-colors"
-              title="Refresh"
-            >
-              <RefreshCw className="size-4" />
-            </button>
-          )}
+            {isCodeFile && artifact.path && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={handleOpenInEditor}
+                    className="text-muted-foreground hover:bg-accent hover:text-foreground flex size-8 cursor-pointer items-center justify-center rounded-md transition-colors"
+                  >
+                    <FileCode2 className="size-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  <p>Open in Editor</p>
+                </TooltipContent>
+              </Tooltip>
+            )}
 
-          {/* Fullscreen */}
-          <button
-            onClick={() => setIsFullscreen(!isFullscreen)}
-            className="text-muted-foreground hover:bg-accent hover:text-foreground flex size-8 cursor-pointer items-center justify-center rounded-md transition-colors"
-            title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
-          >
-            <Maximize2 className="size-4" />
-          </button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={() => setIsFullscreen(!isFullscreen)}
+                  className="text-muted-foreground hover:bg-accent hover:text-foreground flex size-8 cursor-pointer items-center justify-center rounded-md transition-colors"
+                >
+                  <Maximize2 className="size-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                <p>{isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}</p>
+              </TooltipContent>
+            </Tooltip>
 
-          {/* Close */}
-          {onClose && (
-            <button
-              onClick={onClose}
-              className="text-muted-foreground hover:bg-accent hover:text-foreground flex size-8 cursor-pointer items-center justify-center rounded-md transition-colors"
-              title="Close"
-            >
-              <X className="size-4" />
-            </button>
-          )}
-        </div>
+            {onClose && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={onClose}
+                    className="text-muted-foreground hover:bg-accent hover:text-foreground flex size-8 cursor-pointer items-center justify-center rounded-md transition-colors"
+                  >
+                    <X className="size-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  <p>Close</p>
+                </TooltipContent>
+              </Tooltip>
+            )}
+          </div>
+        </TooltipProvider>
       </div>
 
-      {/* View mode toggle - show when preview or code view is available */}
-      {(hasPreview || hasCodeView) && (
+      {/* View mode toggle */}
+      {(hasCodeView || (canUseLivePreview && viewMode === 'preview')) && (
         <div className="bg-muted/20 border-border/30 flex shrink-0 items-center gap-2 border-b px-4 py-2">
-          {/* Only show toggle if both preview and code are available */}
           {hasPreview && hasCodeView && (
             <div className="bg-muted flex items-center gap-1 rounded-lg p-0.5">
               <button
@@ -666,7 +403,6 @@ export function ArtifactPreview({
             </div>
           )}
 
-          {/* Live/Static toggle for HTML artifacts */}
           {canUseLivePreview && viewMode === 'preview' && (
             <div className="bg-muted flex items-center gap-1 rounded-lg p-0.5">
               <button
@@ -684,7 +420,6 @@ export function ArtifactPreview({
               <button
                 onClick={() => {
                   setPreviewMode('live');
-                  // Auto-start live preview if not already running
                   if (livePreviewStatus === 'idle' && onStartLivePreview) {
                     onStartLivePreview();
                   }
@@ -710,7 +445,6 @@ export function ArtifactPreview({
             </div>
           )}
 
-          {/* Show code indicator for code-only files */}
           {!hasPreview && hasCodeView && (
             <div className="bg-muted text-foreground flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium">
               <Code className="size-3.5" />
@@ -718,7 +452,6 @@ export function ArtifactPreview({
             </div>
           )}
 
-          {/* Copy button for code view */}
           {hasCodeView && viewMode === 'code' && (
             <button
               onClick={handleCopy}
@@ -736,21 +469,6 @@ export function ArtifactPreview({
                   <span>Copy</span>
                 </>
               )}
-            </button>
-          )}
-
-          {/* Download button */}
-          {artifact.content && (
-            <button
-              onClick={handleDownload}
-              className={cn(
-                'text-muted-foreground hover:bg-accent hover:text-foreground flex cursor-pointer items-center gap-1.5 rounded-md px-2 py-1 text-xs transition-colors',
-                !(hasCodeView && viewMode === 'code') && 'ml-auto'
-              )}
-              title="Download"
-            >
-              <Download className="size-3.5" />
-              <span>Download</span>
             </button>
           )}
         </div>
@@ -779,7 +497,7 @@ export function ArtifactPreview({
             />
           )
         ) : (
-          <CodeContent artifact={artifact} />
+          <CodePreview artifact={artifact} />
         )}
       </div>
     </div>
@@ -804,6 +522,37 @@ function PreviewContent({
   currentSlide: number;
   onSlideChange: (slide: number) => void;
 }) {
+  // Open file in system application
+  const handleOpenExternal = async () => {
+    if (!artifact.path) return;
+    try {
+      const API_PORT = import.meta.env?.PROD ? 2620 : 2026;
+      const response = await fetch(`http://localhost:${API_PORT}/files/open`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: artifact.path }),
+      });
+      const data = await response.json();
+      if (!data.success) {
+        console.error('[Preview] Failed to open file:', data.error);
+      }
+    } catch (err) {
+      console.error('[Preview] Error opening file:', err);
+    }
+  };
+
+  // File too large
+  if (artifact.fileTooLarge && artifact.fileSize) {
+    return (
+      <FileTooLarge
+        artifact={artifact}
+        fileSize={artifact.fileSize}
+        icon={FileText}
+        onOpenExternal={handleOpenExternal}
+      />
+    );
+  }
+
   // HTML Preview
   if (artifact.type === 'html' && iframeSrc) {
     return (
@@ -820,16 +569,8 @@ function PreviewContent({
   }
 
   // Image Preview
-  if (artifact.type === 'image' && artifact.content) {
-    return (
-      <div className="bg-muted/20 flex h-full items-center justify-center p-4">
-        <img
-          src={artifact.content}
-          alt={artifact.name}
-          className="max-h-full max-w-full rounded-lg object-contain shadow-sm"
-        />
-      </div>
-    );
+  if (artifact.type === 'image') {
+    return <ImagePreview artifact={artifact} />;
   }
 
   // Markdown Preview
@@ -845,8 +586,8 @@ function PreviewContent({
     );
   }
 
-  // CSV/Spreadsheet Preview
-  if ((artifact.type === 'csv' || artifact.type === 'spreadsheet') && csvData) {
+  // CSV Preview
+  if (artifact.type === 'csv' && csvData) {
     return (
       <div className="bg-background h-full overflow-auto">
         <table className="w-full border-collapse text-sm">
@@ -883,15 +624,28 @@ function PreviewContent({
     );
   }
 
-  // Presentation Preview (slides)
+  // Excel Preview
+  if (artifact.type === 'spreadsheet' && artifact.path) {
+    return <ExcelPreview artifact={artifact} />;
+  }
+
+  // PPTX Preview
+  if (artifact.type === 'presentation' && artifact.path) {
+    return <PptxPreview artifact={artifact} />;
+  }
+
+  // DOCX Preview
+  if (artifact.type === 'document' && artifact.path) {
+    return <DocxPreview artifact={artifact} />;
+  }
+
+  // Legacy presentation preview (slides from artifact.slides)
   if (artifact.type === 'presentation' && slides) {
     return (
       <div className="bg-muted/30 flex h-full flex-col overflow-hidden">
-        {/* Main slide display */}
         <div className="flex flex-1 items-center justify-center overflow-hidden p-4">
           <div className="relative aspect-[16/9] w-full max-w-4xl overflow-hidden rounded-lg bg-white shadow-lg">
             {slides[currentSlide]?.startsWith('<') ? (
-              // HTML slide content
               <iframe
                 srcDoc={slides[currentSlide]}
                 className="h-full w-full border-0"
@@ -900,28 +654,24 @@ function PreviewContent({
               />
             ) : slides[currentSlide]?.startsWith('data:') ||
               slides[currentSlide]?.startsWith('http') ? (
-              // Image slide
               <img
                 src={slides[currentSlide]}
                 alt={`Slide ${currentSlide + 1}`}
                 className="h-full w-full object-contain"
               />
             ) : (
-              // Text slide content
               <div className="flex h-full w-full items-center justify-center p-8">
                 <div className="text-center whitespace-pre-wrap text-gray-800">
                   {slides[currentSlide]}
                 </div>
               </div>
             )}
-            {/* Page indicator */}
             <div className="absolute right-4 bottom-4 rounded-md bg-black/60 px-3 py-1.5 text-xs text-white">
               Page {currentSlide + 1} / {slides.length}
             </div>
           </div>
         </div>
 
-        {/* Slide thumbnails */}
         <div className="border-border bg-background shrink-0 border-t">
           <div className="flex gap-2 overflow-x-auto p-3">
             {slides.map((slide, index) => (
@@ -961,12 +711,27 @@ function PreviewContent({
     );
   }
 
-  // PDF Preview - use separate component for async loading
+  // PDF Preview
   if (artifact.type === 'pdf') {
-    return <PdfPreviewContent artifact={artifact} />;
+    return <PdfPreview artifact={artifact} />;
   }
 
-  // Document Preview (docx) - show placeholder with info
+  // Audio Preview
+  if (artifact.type === 'audio') {
+    return <AudioPreview artifact={artifact} />;
+  }
+
+  // Video Preview
+  if (artifact.type === 'video') {
+    return <VideoPreview artifact={artifact} />;
+  }
+
+  // Font Preview
+  if (artifact.type === 'font') {
+    return <FontPreview artifact={artifact} />;
+  }
+
+  // Document Preview (fallback)
   if (artifact.type === 'document') {
     return (
       <div className="bg-muted/20 flex h-full flex-col items-center justify-center p-8">
@@ -977,32 +742,10 @@ function PreviewContent({
           <h3 className="text-foreground mb-2 text-lg font-medium">
             {artifact.name}
           </h3>
-          <p className="text-muted-foreground mb-4 text-sm">
-            Document files can be opened with Microsoft Word or other compatible
-            applications.
+          <p className="text-muted-foreground text-sm">
+            Use the external link button above to open with Microsoft Word or
+            other compatible applications.
           </p>
-          <div className="flex gap-2">
-            <button
-              onClick={() => {
-                if (!artifact.content) return;
-                const blob = new Blob([artifact.content], {
-                  type: 'application/octet-stream',
-                });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = artifact.name;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-              }}
-              className="bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
-            >
-              <Download className="size-4" />
-              Download
-            </button>
-          </div>
         </div>
       </div>
     );
@@ -1022,52 +765,6 @@ function PreviewContent({
           Switch to Code view to see the content
         </p>
       </div>
-    </div>
-  );
-}
-
-// Code content component with syntax highlighting
-function CodeContent({ artifact }: { artifact: Artifact }) {
-  const { theme } = useTheme();
-
-  if (!artifact.content) {
-    return (
-      <div className="flex h-full items-center justify-center p-4">
-        <p className="text-muted-foreground text-sm">No content available</p>
-      </div>
-    );
-  }
-
-  const language = getLanguageHint(artifact);
-  const isDark =
-    theme === 'dark' ||
-    (theme === 'system' &&
-      window.matchMedia('(prefers-color-scheme: dark)').matches);
-
-  return (
-    <div className="h-full overflow-auto">
-      <SyntaxHighlighter
-        language={language}
-        style={isDark ? oneDark : oneLight}
-        showLineNumbers
-        wrapLines
-        customStyle={{
-          margin: 0,
-          padding: '1rem',
-          fontSize: '13px',
-          lineHeight: '1.5',
-          background: 'transparent',
-          minHeight: '100%',
-        }}
-        lineNumberStyle={{
-          minWidth: '3em',
-          paddingRight: '1em',
-          color: isDark ? '#636d83' : '#9ca3af',
-          userSelect: 'none',
-        }}
-      >
-        {artifact.content}
-      </SyntaxHighlighter>
     </div>
   );
 }

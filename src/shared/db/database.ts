@@ -455,27 +455,63 @@ export async function createMessage(
   const database = await getSQLiteDatabase();
 
   if (database) {
-    const result = await database.execute(
-      `INSERT INTO messages (task_id, type, content, tool_name, tool_input, tool_output, tool_use_id, subtype, error_message)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-      [
-        input.task_id,
-        input.type,
-        input.content || null,
-        input.tool_name || null,
-        input.tool_input || null,
-        input.tool_output || null,
-        input.tool_use_id || null,
-        input.subtype || null,
-        input.error_message || null,
-      ]
-    );
+    // Try with attachments column first, fallback to without
+    try {
+      const result = await database.execute(
+        `INSERT INTO messages (task_id, type, content, tool_name, tool_input, tool_output, tool_use_id, subtype, error_message, attachments)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [
+          input.task_id,
+          input.type,
+          input.content || null,
+          input.tool_name || null,
+          input.tool_input || null,
+          input.tool_output || null,
+          input.tool_use_id || null,
+          input.subtype || null,
+          input.error_message || null,
+          input.attachments || null,
+        ]
+      );
 
-    const messages = await database.select<Message[]>(
-      'SELECT * FROM messages WHERE id = $1',
-      [result.lastInsertId]
-    );
-    return messages[0];
+      const messages = await database.select<Message[]>(
+        'SELECT * FROM messages WHERE id = $1',
+        [result.lastInsertId]
+      );
+      return messages[0];
+    } catch {
+      // Fallback: add attachments column if it doesn't exist
+      try {
+        await database.execute(
+          'ALTER TABLE messages ADD COLUMN attachments TEXT'
+        );
+      } catch {
+        // Column may already exist
+      }
+
+      const result = await database.execute(
+        `INSERT INTO messages (task_id, type, content, tool_name, tool_input, tool_output, tool_use_id, subtype, error_message, attachments)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [
+          input.task_id,
+          input.type,
+          input.content || null,
+          input.tool_name || null,
+          input.tool_input || null,
+          input.tool_output || null,
+          input.tool_use_id || null,
+          input.subtype || null,
+          input.error_message || null,
+          input.attachments || null,
+        ]
+      );
+
+      const messages = await database.select<Message[]>(
+        'SELECT * FROM messages WHERE id = $1',
+        [result.lastInsertId]
+      );
+      return messages[0];
+    }
   } else {
     const db = await getIndexedDB();
     const message: Omit<Message, 'id'> & { id?: number } = {
@@ -488,6 +524,7 @@ export async function createMessage(
       tool_use_id: input.tool_use_id || null,
       subtype: input.subtype || null,
       error_message: input.error_message || null,
+      attachments: input.attachments || null,
       created_at: now,
     };
 

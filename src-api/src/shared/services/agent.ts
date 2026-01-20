@@ -13,6 +13,7 @@ import {
   type AgentSession,
   type ConversationMessage,
   type IAgent,
+  type ImageAttachment,
   type SandboxConfig,
   type TaskPlan,
 } from '@/core/agent';
@@ -169,7 +170,8 @@ export async function* runAgent(
   workDir?: string,
   taskId?: string,
   modelConfig?: { apiKey?: string; baseUrl?: string; model?: string },
-  sandboxConfig?: SandboxConfig
+  sandboxConfig?: SandboxConfig,
+  images?: ImageAttachment[]
 ): AsyncGenerator<AgentMessage> {
   const agent = getAgent(modelConfig);
 
@@ -180,6 +182,7 @@ export async function* runAgent(
     taskId,
     abortController: session.abortController,
     sandbox: sandboxConfig,
+    images,
   })) {
     yield message;
   }
@@ -203,4 +206,5 @@ export type {
   ConversationMessage,
   AgentConfig,
   IAgent,
+  ImageAttachment,
 };

@@ -118,7 +118,8 @@ export type AccentColor =
   | 'green'
   | 'purple'
   | 'pink'
-  | 'red';
+  | 'red'
+  | 'sage';
 
 export const accentColors: {
   id: AccentColor;
@@ -162,6 +163,25 @@ export const accentColors: {
     color: 'oklch(0.5772 0.2077 27.325)',
     darkColor: 'oklch(0.6495 0.2077 27.325)',
   },
+  {
+    id: 'sage',
+    name: 'Sage',
+    color: 'oklch(0.4531 0.0891 152.535)', // Dark forest green
+    darkColor: 'oklch(0.5654 0.1091 152.535)',
+  },
+];
+
+// Background style presets
+export type BackgroundStyle = 'default' | 'warm' | 'cool';
+
+export const backgroundStyles: {
+  id: BackgroundStyle;
+  name: string;
+  description: string;
+}[] = [
+  { id: 'default', name: 'Default', description: 'Clean neutral background' },
+  { id: 'warm', name: 'Warm', description: 'Cozy cream and beige tones' },
+  { id: 'cool', name: 'Cool', description: 'Crisp blue-gray tones' },
 ];
 
 export interface Settings {
@@ -175,9 +195,11 @@ export interface Settings {
 
   // MCP settings - path to mcp.json config file
   mcpConfigPath: string;
+  mcpEnabled: boolean; // Enable MCP mounting during agent conversations
 
   // Skills settings
   skillsPath: string;
+  skillsEnabled: boolean; // Enable skills mounting during agent conversations
 
   // Workspace settings
   workDir: string; // Working directory for sessions and outputs
@@ -194,6 +216,7 @@ export interface Settings {
   // General settings
   theme: 'light' | 'dark' | 'system';
   accentColor: AccentColor;
+  backgroundStyle: BackgroundStyle;
   language: string;
 }
 
@@ -273,7 +296,9 @@ export const defaultSettings: Settings = {
   defaultProvider: 'default', // Use environment variables by default
   defaultModel: '',
   mcpConfigPath: '', // Will be resolved to app data dir at init
+  mcpEnabled: true, // Enable MCP by default
   skillsPath: '', // Will be resolved to app data dir at init
+  skillsEnabled: true, // Enable skills by default
   workDir: '', // Will be resolved to app data dir at init
   sandboxEnabled: false,
   sandboxProviders: defaultSandboxProviders,
@@ -282,6 +307,7 @@ export const defaultSettings: Settings = {
   defaultAgentRuntime: 'claude', // Default to Claude Code
   theme: 'system',
   accentColor: 'orange',
+  backgroundStyle: 'default',
   language: 'zh-CN',
 };
 
@@ -623,4 +649,72 @@ export async function syncSettingsWithBackend(): Promise<void> {
 export async function saveSettingsWithSync(settings: Settings): Promise<void> {
   saveSettings(settings);
   await syncSettingsWithBackend();
+}
+
+// ============================================================================
+// Individual Setting Items (for flags like setupCompleted)
+// ============================================================================
+
+/**
+ * Save a single setting item (for simple key-value flags)
+ */
+export async function saveSettingItem(
+  key: string,
+  value: string
+): Promise<void> {
+  const database = await getDatabase();
+
+  if (database) {
+    try {
+      await database.execute(
+        `INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES ($1, $2, datetime('now'))`,
+        [key, JSON.stringify(value)]
+      );
+    } catch (error) {
+      console.error(`[Settings] Failed to save ${key} to database:`, error);
+    }
+  }
+
+  // Also save to localStorage
+  try {
+    localStorage.setItem(`workany_${key}`, value);
+  } catch (error) {
+    console.error(`[Settings] Failed to save ${key} to localStorage:`, error);
+  }
+}
+
+/**
+ * Get a single setting item
+ */
+export async function getSettingItem(key: string): Promise<string | null> {
+  const database = await getDatabase();
+
+  if (database) {
+    try {
+      const result = await database.select<{ value: string }[]>(
+        'SELECT value FROM settings WHERE key = $1',
+        [key]
+      );
+      if (result.length > 0) {
+        return JSON.parse(result[0].value);
+      }
+    } catch (error) {
+      console.error(`[Settings] Failed to get ${key} from database:`, error);
+    }
+  }
+
+  // Fallback to localStorage
+  try {
+    return localStorage.getItem(`workany_${key}`);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Check if setup has been completed
+ */
+export async function isSetupCompleted(): Promise<boolean> {
+  const value = await getSettingItem('setupCompleted');
+  return value === 'true';
 }
