@@ -29,7 +29,7 @@ export default {
   backgroundStyle: '背景风格',
 
   // Workspace
-  workplaceDescription: '配置智能体运行时、代码环境和工作目录',
+  workplaceDescription: '配置代码环境和工作目录',
   agentRuntime: '智能体运行时',
   agentRuntimeDescription: '执行任务的 AI 智能体',
   runtimeClaudeCode: 'Claude Code',

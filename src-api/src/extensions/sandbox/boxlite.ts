@@ -23,27 +23,298 @@ import type {
 
 // Dynamic import for BoxLite to handle platforms where it's not available
 let SimpleBox: typeof import('@boxlite-ai/boxlite').SimpleBox | null = null;
-let boxliteAvailable = false;
+let boxliteModuleLoaded = false;
+let boxliteRuntimeVerified = false;
+let boxliteRuntimeError: string | null = null;
 
-// Try to load BoxLite
-async function loadBoxLite(): Promise<boolean> {
-  if (boxliteAvailable) {
+// Direct native module imports for Bun compatibility
+// Native modules are shipped alongside the binary, not bundled
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let nativeModule: any = null;
+
+// Custom SimpleBox implementation for when we load native module directly
+// This mirrors the functionality of @boxlite-ai/boxlite's SimpleBox class
+class SimpleBoxDirect {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private _runtime: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private _box: any = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private _boxPromise: Promise<any> | null = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private _boxOpts: any;
+  private _name?: string;
+
+  constructor(options: {
+    image?: string;
+    cpus?: number;
+    memoryMib?: number;
+    autoRemove?: boolean;
+    workingDir?: string;
+    env?: Record<string, string>;
+    volumes?: Array<{ hostPath: string; guestPath: string; readOnly?: boolean }>;
+  } = {}) {
+    const JsBoxlite = nativeModule?.JsBoxlite;
+    if (!JsBoxlite) {
+      throw new Error('Native module not loaded');
+    }
+
+    this._runtime = JsBoxlite.withDefaultConfig();
+    this._boxOpts = {
+      image: options.image,
+      cpus: options.cpus,
+      memoryMib: options.memoryMib,
+      autoRemove: options.autoRemove ?? true,
+      detach: false,
+      workingDir: options.workingDir,
+      env: options.env
+        ? Object.entries(options.env).map(([key, value]) => ({ key, value }))
+        : undefined,
+      volumes: options.volumes,
+    };
+  }
+
+  private async _ensureBox() {
+    if (this._box) {
+      return this._box;
+    }
+    if (!this._boxPromise) {
+      this._boxPromise = this._runtime.create(this._boxOpts, this._name);
+    }
+    this._box = await this._boxPromise;
+    return this._box;
+  }
+
+  async exec(cmd: string, ...args: string[]): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+    const box = await this._ensureBox();
+    const execution = await box.exec(cmd, args, undefined, false);
+
+    const stdoutLines: string[] = [];
+    const stderrLines: string[] = [];
+
+    // Get streams
+    let stdout = null;
+    let stderr = null;
+    try { stdout = await execution.stdout(); } catch { /* expected */ }
+    try { stderr = await execution.stderr(); } catch { /* expected */ }
+
+    // Read stdout
+    if (stdout) {
+      try {
+        while (true) {
+          const line = await stdout.next();
+          if (line === null) break;
+          stdoutLines.push(line);
+        }
+      } catch { /* stream ended */ }
+    }
+
+    // Read stderr
+    if (stderr) {
+      try {
+        while (true) {
+          const line = await stderr.next();
+          if (line === null) break;
+          stderrLines.push(line);
+        }
+      } catch { /* stream ended */ }
+    }
+
+    const result = await execution.wait();
+    return {
+      exitCode: result.exitCode,
+      stdout: stdoutLines.join(''),
+      stderr: stderrLines.join(''),
+    };
+  }
+
+  async stop(): Promise<void> {
+    if (!this._box) return;
+    await this._box.stop();
+  }
+}
+
+// Get potential directories where boxlite native module might be located
+function getBoxliteSearchPaths(): string[] {
+  const execPath = process.execPath;
+  const execDir = path.dirname(execPath);
+  const searchPaths: string[] = [];
+
+  // Check if running as Bun compiled binary (single file executable)
+  const isBunBinary = execPath.includes('workany-api') ||
+                      (!execPath.includes('node') && !execPath.includes('bun'));
+
+  if (isBunBinary) {
+    // 1. Same directory as executable (Linux, Windows, development)
+    searchPaths.push(path.join(execDir, 'boxlite'));
+
+    // 2. macOS app bundle: Resources directory (Contents/MacOS/../Resources)
+    searchPaths.push(path.join(execDir, '..', 'Resources', 'boxlite'));
+
+    // 3. macOS app bundle alternative: just Resources
+    searchPaths.push(path.join(execDir, 'Resources', 'boxlite'));
+  }
+
+  return searchPaths;
+}
+
+// Try to load native module directly (for Bun compiled binaries)
+function loadNativeModuleDirect(): unknown {
+  if (nativeModule) {
+    return nativeModule;
+  }
+
+  // Determine the native module filename based on platform
+  let nodeFileName = '';
+  if (process.platform === 'darwin' && process.arch === 'arm64') {
+    nodeFileName = 'index.darwin-arm64.node';
+  } else if (process.platform === 'linux' && process.arch === 'x64') {
+    nodeFileName = 'index.linux-x64-gnu.node';
+  } else if (process.platform === 'darwin' && process.arch === 'x64') {
+    nodeFileName = 'index.darwin-x64.node';
+  }
+
+  if (!nodeFileName) {
+    console.log(`[BoxLiteProvider] Unsupported platform: ${process.platform}-${process.arch}`);
+    return null;
+  }
+
+  // Search for native module in potential locations
+  const searchPaths = getBoxliteSearchPaths();
+  console.log(`[BoxLiteProvider] Searching for native module in: ${searchPaths.join(', ')}`);
+
+  for (const boxliteDir of searchPaths) {
+    const nativeModulePath = path.join(boxliteDir, nodeFileName);
+
+    if (fs.existsSync(nativeModulePath)) {
+      try {
+        console.log(`[BoxLiteProvider] Loading native module from: ${nativeModulePath}`);
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        nativeModule = require(nativeModulePath);
+        console.log(`[BoxLiteProvider] Loaded native module: ${process.platform}-${process.arch}`);
+        return nativeModule;
+      } catch (error) {
+        console.warn(`[BoxLiteProvider] Failed to load from ${nativeModulePath}:`, error);
+      }
+    } else {
+      console.log(`[BoxLiteProvider] Native module not found at: ${nativeModulePath}`);
+    }
+  }
+
+  // Fallback: Try npm package require (for development mode)
+  try {
+    if (process.platform === 'darwin' && process.arch === 'arm64') {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      nativeModule = require('@boxlite-ai/boxlite-darwin-arm64');
+      console.log('[BoxLiteProvider] Loaded native module from npm: darwin-arm64');
+      return nativeModule;
+    } else if (process.platform === 'linux' && process.arch === 'x64') {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      nativeModule = require('@boxlite-ai/boxlite-linux-x64-gnu');
+      console.log('[BoxLiteProvider] Loaded native module from npm: linux-x64');
+      return nativeModule;
+    }
+  } catch (error) {
+    console.warn('[BoxLiteProvider] Failed to load native module from npm:', error);
+  }
+
+  return null;
+}
+
+// Try to load BoxLite module
+async function loadBoxLiteModule(): Promise<boolean> {
+  if (boxliteModuleLoaded) {
     return true;
   }
 
+  // First try to load native module directly (for Bun compatibility)
+  const directNative = loadNativeModuleDirect();
+
+  // If native module is loaded directly, use our custom SimpleBox implementation
+  if (directNative && nativeModule?.JsBoxlite) {
+    console.log('[BoxLiteProvider] Using direct native module with SimpleBoxDirect');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    SimpleBox = SimpleBoxDirect as any;
+    boxliteModuleLoaded = true;
+    return true;
+  }
+
+  // Fallback: Try to import the @boxlite-ai/boxlite JavaScript package
   try {
     const boxlite = await import('@boxlite-ai/boxlite');
     SimpleBox = boxlite.SimpleBox;
-    boxliteAvailable = true;
-    console.log('[BoxLiteProvider] BoxLite loaded successfully');
+    boxliteModuleLoaded = true;
+    console.log('[BoxLiteProvider] BoxLite module loaded from npm package');
     return true;
   } catch (error) {
     console.warn(
-      '[BoxLiteProvider] BoxLite not available:',
+      '[BoxLiteProvider] BoxLite module not available:',
       error instanceof Error ? error.message : error
     );
     return false;
   }
+}
+
+// Verify BoxLite runtime can actually create and run VMs
+async function verifyBoxLiteRuntime(): Promise<boolean> {
+  // If already verified (success or failure), return cached result
+  if (boxliteRuntimeVerified) {
+    console.log(`[BoxLiteProvider] Using cached verification result: ${boxliteRuntimeError === null ? 'success' : 'failed: ' + boxliteRuntimeError}`);
+    return boxliteRuntimeError === null;
+  }
+
+  if (!boxliteModuleLoaded || !SimpleBox) {
+    boxliteRuntimeVerified = true;
+    boxliteRuntimeError = 'BoxLite module not loaded';
+    console.log('[BoxLiteProvider] Verification failed: module not loaded');
+    return false;
+  }
+
+  try {
+    console.log('[BoxLiteProvider] Verifying BoxLite runtime...');
+    // Try to create a minimal box and run a simple command
+    const testBox = new SimpleBox({
+      image: 'alpine:latest',
+      memoryMib: 256,
+      cpus: 1,
+      autoRemove: true,
+    });
+
+    // Try to run a simple command
+    const result = await testBox.exec('echo', 'test');
+    await testBox.stop();
+
+    if (result.exitCode === 0) {
+      console.log('[BoxLiteProvider] ✅ BoxLite runtime verified successfully');
+      boxliteRuntimeVerified = true;
+      boxliteRuntimeError = null;
+      return true;
+    } else {
+      throw new Error(`Test command failed with exit code ${result.exitCode}`);
+    }
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.warn('[BoxLiteProvider] ❌ BoxLite runtime verification failed:', errorMsg);
+    boxliteRuntimeVerified = true;
+    boxliteRuntimeError = errorMsg;
+    return false;
+  }
+}
+
+// Full availability check: module loaded + runtime works
+async function loadBoxLite(): Promise<boolean> {
+  const moduleLoaded = await loadBoxLiteModule();
+  if (!moduleLoaded) {
+    return false;
+  }
+
+  // Verify runtime actually works
+  return verifyBoxLiteRuntime();
+}
+
+// Get the runtime error message (for logging/debugging)
+function getBoxLiteRuntimeError(): string | null {
+  return boxliteRuntimeError;
 }
 
 export class BoxLiteProvider implements ISandboxProvider {
@@ -65,7 +336,10 @@ export class BoxLiteProvider implements ISandboxProvider {
   private currentImage: string = 'node:18-alpine';
 
   async isAvailable(): Promise<boolean> {
-    return loadBoxLite();
+    console.log('[BoxLiteProvider] isAvailable() called');
+    const result = await loadBoxLite();
+    console.log(`[BoxLiteProvider] isAvailable() result: ${result}`);
+    return result;
   }
 
   async init(config?: Record<string, unknown>): Promise<void> {

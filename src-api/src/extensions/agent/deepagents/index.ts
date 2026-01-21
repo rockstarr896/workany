@@ -262,16 +262,16 @@ export class DeepAgentsAdapter extends BaseAgent {
     const session = this.createSession('executing');
     yield { type: 'session', sessionId: session.id };
 
-    const plan = this.getPlan(options.planId);
+    // Use the plan passed in options, or fall back to local lookup
+    const plan = options.plan || this.getPlan(options.planId);
     if (!plan) {
-      yield { type: 'error', message: 'Plan not found' };
+      console.error(`[DeepAgents ${session.id}] Plan not found: ${options.planId}`);
+      yield { type: 'error', message: `Plan not found: ${options.planId}` };
       yield { type: 'done' };
       return;
     }
 
-    console.log(
-      `[DeepAgents ${session.id}] Execution phase started for plan: ${options.planId}`
-    );
+    console.log(`[DeepAgents ${session.id}] Using plan: ${plan.id} (${plan.goal})`);
 
     try {
       const tools = this.convertTools(options.allowedTools);

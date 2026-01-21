@@ -22,4 +22,15 @@ export default {
   success: '成功',
   warning: '警告',
   info: '提示',
+
+  // API 错误提示
+  errors: {
+    connectionFailed: '连接服务失败，正在重试...',
+    connectionFailedFinal: '无法连接到服务，请检查网络或稍后再试',
+    corsError: '请求被阻止，请检查服务配置',
+    timeout: '请求超时，请稍后再试',
+    serverNotRunning: '服务未启动，请先启动应用',
+    requestFailed: '请求失败：{message}',
+    retrying: '正在重试 ({attempt}/{max})...',
+  },
 };

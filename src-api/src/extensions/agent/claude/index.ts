@@ -1155,7 +1155,6 @@ User's request (answer this AFTER reading the images):
           name: error.name,
           message: error.message,
           stack: error.stack,
-          ...(error as Record<string, unknown>),
         } : error,
         config: {
           baseUrl: this.config.baseUrl || '(default)',
@@ -1339,12 +1338,16 @@ If you need to create any files during planning, use this directory.
     const session = this.createSession('executing');
     yield { type: 'session', sessionId: session.id };
 
-    const plan = this.getPlan(options.planId);
+    // Use the plan passed in options, or fall back to local lookup
+    const plan = options.plan || this.getPlan(options.planId);
     if (!plan) {
-      yield { type: 'error', message: 'Plan not found' };
+      console.error(`[Claude ${session.id}] Plan not found: ${options.planId}`);
+      yield { type: 'error', message: `Plan not found: ${options.planId}` };
       yield { type: 'done' };
       return;
     }
+
+    console.log(`[Claude ${session.id}] Using plan: ${plan.id} (${plan.goal})`);
 
     const sessionCwd = await getSessionWorkDir(
       options.cwd || this.config.workDir,

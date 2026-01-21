@@ -19,4 +19,6 @@ export default {
   stop: 'Stop',
   retry: 'Retry',
   openInFinder: 'Open in Finder',
+  apiKeyError: 'Model configuration error. Please check your API Key',
+  configureModel: 'Click to configure model',
 };

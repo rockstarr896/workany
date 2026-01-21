@@ -29,8 +29,7 @@ export default {
   backgroundStyle: 'Background Style',
 
   // Workspace
-  workplaceDescription:
-    'Configure agent runtime, code environment and working directory',
+  workplaceDescription: 'Configure code environment and working directory',
   agentRuntime: 'Agent Runtime',
   agentRuntimeDescription: 'The AI agent that executes tasks',
   runtimeClaudeCode: 'Claude Code',

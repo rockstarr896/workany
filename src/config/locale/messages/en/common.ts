@@ -22,4 +22,15 @@ export default {
   success: 'Success',
   warning: 'Warning',
   info: 'Info',
+
+  // API error messages
+  errors: {
+    connectionFailed: 'Connection failed, retrying...',
+    connectionFailedFinal: 'Unable to connect. Please check your network or try again later',
+    corsError: 'Request blocked. Please check service configuration',
+    timeout: 'Request timed out. Please try again',
+    serverNotRunning: 'Service not running. Please start the app first',
+    requestFailed: 'Request failed: {message}',
+    retrying: 'Retrying ({attempt}/{max})...',
+  },
 };

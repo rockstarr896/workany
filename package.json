@@ -1,9 +1,10 @@
 {
   "name": "workany",
   "private": true,
-  "version": "0.1.1",
+  "version": "0.1.2",
   "type": "module",
   "scripts": {
+    "ver": "./scripts/version.sh",
     "dev": "vite",
     "dev:api": "pnpm --filter workany-api dev",
     "dev:all": "concurrently \"pnpm dev\" \"pnpm dev:api\"",

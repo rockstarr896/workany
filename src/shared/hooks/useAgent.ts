@@ -18,40 +18,95 @@ import {
   type AttachmentReference,
 } from '@/shared/lib/attachments';
 import { API_BASE_URL, API_PORT } from '@/config';
+import { translations, type Language } from '@/config/locale';
 
 const AGENT_SERVER_URL = API_BASE_URL;
+
+// Helper to get current language translations
+function getErrorMessages() {
+  const settings = getSettings();
+  const lang = (settings.language || 'zh-CN') as Language;
+  return translations[lang]?.common?.errors || translations['zh-CN'].common.errors;
+}
 
 console.log(
   `[API] Environment: ${import.meta.env.PROD ? 'production' : 'development'}, Port: ${API_PORT}`
 );
 
-// Helper to format fetch errors with more details
-function formatFetchError(error: unknown, endpoint: string): string {
+// Helper to format fetch errors with more details (user-friendly, localized)
+function formatFetchError(error: unknown, _endpoint: string): string {
   const err = error as Error;
   const message = err.message || String(error);
+  const t = getErrorMessages();
 
-  // Common error patterns
+  // Common error patterns - use friendly messages
   if (message === 'Load failed' || message === 'Failed to fetch' || message.includes('NetworkError')) {
-    return `无法连接到 API 服务 (${AGENT_SERVER_URL}${endpoint})。请检查：\n` +
-      `1. API 服务是否已启动\n` +
-      `2. 端口 ${API_PORT} 是否被占用\n` +
-      `3. 防火墙是否阻止连接`;
+    return t.connectionFailedFinal;
   }
 
   if (message.includes('CORS') || message.includes('cross-origin')) {
-    return `跨域请求被阻止 (CORS)。API 服务可能配置错误。`;
+    return t.corsError;
   }
 
   if (message.includes('timeout') || message.includes('Timeout')) {
-    return `请求超时。API 服务响应过慢或网络问题。`;
+    return t.timeout;
   }
 
   if (message.includes('ECONNREFUSED')) {
-    return `连接被拒绝。API 服务未在端口 ${API_PORT} 上运行。`;
+    return t.serverNotRunning;
   }
 
-  // Return original message with context
-  return `API 请求失败: ${message}`;
+  // Return generic message for other errors
+  return t.requestFailed.replace('{message}', message);
+}
+
+// Fetch with retry logic for better resilience
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  maxRetries: number = 3,
+  retryDelay: number = 1000
+): Promise<Response> {
+  let lastError: Error | null = null;
+  const t = getErrorMessages();
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, options);
+      return response;
+    } catch (error) {
+      lastError = error as Error;
+      const errorMessage = lastError.message || '';
+
+      // Don't retry if aborted
+      if (lastError.name === 'AbortError') {
+        throw lastError;
+      }
+
+      // Only retry on network errors
+      const isNetworkError =
+        errorMessage === 'Load failed' ||
+        errorMessage === 'Failed to fetch' ||
+        errorMessage.includes('NetworkError') ||
+        errorMessage.includes('ECONNREFUSED');
+
+      if (!isNetworkError) {
+        throw lastError;
+      }
+
+      // Wait before retrying (exponential backoff)
+      if (attempt < maxRetries - 1) {
+        const delay = retryDelay * Math.pow(2, attempt);
+        const retryMsg = t.retrying
+          .replace('{attempt}', String(attempt + 1))
+          .replace('{max}', String(maxRetries));
+        console.log(`[useAgent] ${retryMsg} (${delay}ms)`);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+  }
+
+  throw lastError || new Error('Fetch failed after retries');
 }
 
 // Helper to get model configuration from settings
@@ -134,6 +189,16 @@ function getSandboxConfig():
       enabled: true,
       apiEndpoint: AGENT_SERVER_URL, // Use the same server
     };
+  } catch {
+    return undefined;
+  }
+}
+
+// Helper to get skills path from settings
+function getSkillsPath(): string | undefined {
+  try {
+    const settings = getSettings();
+    return settings.skillsPath || undefined;
   } catch {
     return undefined;
   }
@@ -1128,9 +1193,10 @@ export function useAgent(): UseAgentReturn {
           // Use session folder as workDir
           const workDir = computedSessionFolder || (await getAppDataDir());
           const sandboxConfig = getSandboxConfig();
+          const skillsPath = getSkillsPath();
 
           // Use direct execution endpoint with images
-          const response = await fetch(`${AGENT_SERVER_URL}/agent`, {
+          const response = await fetchWithRetry(`${AGENT_SERVER_URL}/agent`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -1142,6 +1208,7 @@ export function useAgent(): UseAgentReturn {
               modelConfig,
               sandboxConfig,
               images,
+              skillsPath,
             }),
             signal: abortController.signal,
           });
@@ -1155,7 +1222,7 @@ export function useAgent(): UseAgentReturn {
         }
 
         // Phase 1: Request planning (no images)
-        const response = await fetch(`${AGENT_SERVER_URL}/agent/plan`, {
+        const response = await fetchWithRetry(`${AGENT_SERVER_URL}/agent/plan`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -1322,8 +1389,9 @@ export function useAgent(): UseAgentReturn {
       }
       const modelConfig = getModelConfig();
       const sandboxConfig = getSandboxConfig();
+      const skillsPath = getSkillsPath();
 
-      const response = await fetch(`${AGENT_SERVER_URL}/agent/execute`, {
+      const response = await fetchWithRetry(`${AGENT_SERVER_URL}/agent/execute`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1335,6 +1403,7 @@ export function useAgent(): UseAgentReturn {
           taskId,
           modelConfig,
           sandboxConfig,
+          skillsPath,
         }),
         signal: abortController.signal,
       });
@@ -1435,6 +1504,7 @@ export function useAgent(): UseAgentReturn {
         }
         const modelConfig = getModelConfig();
         const sandboxConfig = getSandboxConfig();
+        const skillsPath = getSkillsPath();
 
         // Prepare images for API (only send image attachments)
         const images = attachments
@@ -1445,7 +1515,7 @@ export function useAgent(): UseAgentReturn {
           }));
 
         // Send conversation with full history
-        const response = await fetch(`${AGENT_SERVER_URL}/agent`, {
+        const response = await fetchWithRetry(`${AGENT_SERVER_URL}/agent`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -1458,6 +1528,7 @@ export function useAgent(): UseAgentReturn {
             modelConfig,
             sandboxConfig,
             images: images && images.length > 0 ? images : undefined,
+            skillsPath,
           }),
           signal: abortController.signal,
         });

@@ -33,6 +33,7 @@ async function ensureInitialized() {
 
 /**
  * Check if sandbox is available on this platform
+ * Returns detailed info about which provider is being used
  */
 sandbox.get('/available', async (c) => {
   await ensureInitialized();
@@ -41,6 +42,7 @@ sandbox.get('/available', async (c) => {
   return c.json({
     available: info.available,
     provider: info.provider,
+    providerName: info.providerName,
     isolation: info.isolation,
     mode:
       info.isolation === 'vm'
@@ -49,6 +51,8 @@ sandbox.get('/available', async (c) => {
           ? 'container'
           : 'fallback',
     message: info.message,
+    usedFallback: info.usedFallback,
+    fallbackReason: info.fallbackReason,
   });
 });
 
@@ -108,10 +112,25 @@ sandbox.post('/exec', async (c) => {
     };
 
     const result = await sandboxProvider.exec(execOptions);
+    const caps = sandboxProvider.getCapabilities();
+    const isolationLabel = caps.isolation === 'vm'
+      ? 'VM 硬件隔离'
+      : caps.isolation === 'container'
+      ? '容器隔离'
+      : caps.isolation === 'process'
+      ? '进程隔离'
+      : '无隔离';
 
     return c.json({
       success: result.exitCode === 0,
       provider: sandboxProvider.type,
+      providerName: sandboxProvider.name,
+      providerInfo: {
+        type: sandboxProvider.type,
+        name: sandboxProvider.name,
+        isolation: caps.isolation,
+        isolationLabel,
+      },
       ...result,
     });
   } catch (error) {
@@ -240,10 +259,26 @@ sandbox.post('/run/file', async (c) => {
       scriptOptions
     );
 
+    const caps = sandboxProvider.getCapabilities();
+    const isolationLabel = caps.isolation === 'vm'
+      ? 'VM 硬件隔离'
+      : caps.isolation === 'container'
+      ? '容器隔离'
+      : caps.isolation === 'process'
+      ? '进程隔离'
+      : '无隔离';
+
     return c.json({
       success: result.exitCode === 0,
       runtime,
       provider: sandboxProvider.type,
+      providerName: sandboxProvider.name,
+      providerInfo: {
+        type: sandboxProvider.type,
+        name: sandboxProvider.name,
+        isolation: caps.isolation,
+        isolationLabel,
+      },
       exitCode: result.exitCode,
       stdout: result.stdout,
       stderr: result.stderr,
@@ -386,10 +421,26 @@ sandbox.post('/exec/stream', async (c) => {
         ? await getSandboxProvider(preferredProvider)
         : await getBestProvider();
 
+      const caps = sandboxProvider.getCapabilities();
+      const isolationLabel = caps.isolation === 'vm'
+        ? 'VM 硬件隔离'
+        : caps.isolation === 'container'
+        ? '容器隔离'
+        : caps.isolation === 'process'
+        ? '进程隔离'
+        : '无隔离';
+
       await stream.writeSSE({
         data: JSON.stringify({
           type: 'started',
           provider: sandboxProvider.type,
+          providerName: sandboxProvider.name,
+          providerInfo: {
+            type: sandboxProvider.type,
+            name: sandboxProvider.name,
+            isolation: caps.isolation,
+            isolationLabel,
+          },
         }),
       });
 

@@ -246,7 +246,7 @@ export function ChatInput({
 
     // Calculate the new height
     const maxHeight = isHome ? 200 : 120; // Max height in pixels
-    const minHeight = isHome ? 24 : 20; // Min height in pixels
+    const minHeight = isHome ? 56 : 20; // Min height in pixels (home: taller default)
     const newHeight = Math.min(Math.max(textarea.scrollHeight, minHeight), maxHeight);
 
     textarea.style.height = `${newHeight}px`;
@@ -324,7 +324,7 @@ export function ChatInput({
           isHome ? 'text-base' : 'px-1 text-sm'
         )}
         style={{
-          minHeight: isHome ? '24px' : '20px',
+          minHeight: isHome ? '56px' : '20px',
           maxHeight: isHome ? '200px' : '120px',
           overflowY: 'hidden',
         }}
@@ -342,11 +342,11 @@ export function ChatInput({
               className={cn(
                 'flex items-center justify-center transition-colors focus:outline-none disabled:cursor-not-allowed disabled:opacity-50',
                 isHome
-                  ? 'border-border bg-background text-muted-foreground hover:bg-accent hover:text-foreground size-9 rounded-full border'
+                  ? 'border-border bg-background text-muted-foreground hover:bg-accent hover:text-foreground size-8 rounded-full border'
                   : 'text-muted-foreground hover:bg-accent hover:text-foreground size-7 rounded-md'
               )}
             >
-              <Plus className={isHome ? 'size-5' : 'size-4'} />
+              <Plus className={isHome ? 'size-4' : 'size-4'} />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" sideOffset={8} className="z-50 w-56">
               <DropdownMenuItem
@@ -369,11 +369,11 @@ export function ChatInput({
               className={cn(
                 'flex items-center justify-center rounded-full transition-colors',
                 isHome
-                  ? 'size-9 bg-red-500 text-white hover:bg-red-600'
+                  ? 'size-8 bg-red-500 text-white hover:bg-red-600'
                   : 'bg-destructive text-destructive-foreground hover:bg-destructive/90 size-7'
               )}
             >
-              <Square className={isHome ? 'size-4' : 'size-3'} />
+              <Square className={isHome ? 'size-3.5' : 'size-3'} />
             </button>
           ) : (
             <button
@@ -385,11 +385,11 @@ export function ChatInput({
                 canSubmit
                   ? 'bg-foreground text-background hover:bg-foreground/90 cursor-pointer'
                   : 'bg-muted text-muted-foreground cursor-not-allowed',
-                isHome ? 'size-9' : 'size-7'
+                isHome ? 'size-8' : 'size-7'
               )}
             >
               {isHome ? (
-                <ArrowUp className="size-5" />
+                <ArrowUp className="size-4" />
               ) : (
                 <Send className="size-3" />
               )}

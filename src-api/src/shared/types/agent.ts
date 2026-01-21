@@ -60,6 +60,7 @@ export interface AgentRequest {
   // Workspace settings
   workDir?: string; // Working directory for session outputs
   taskId?: string; // Task ID for session folder
+  skillsPath?: string; // Custom skills directory path
   // Provider selection (optional, defaults to env config)
   provider?: 'claude' | 'deepagents';
   // Custom model configuration

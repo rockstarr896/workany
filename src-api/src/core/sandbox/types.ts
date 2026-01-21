@@ -70,6 +70,12 @@ export interface SandboxExecResult {
   exitCode: number;
   /** Execution duration in milliseconds */
   duration: number;
+  /** Provider that executed the command (for UI display) */
+  provider?: {
+    type: SandboxProviderType;
+    name: string;
+    isolation: 'vm' | 'container' | 'process' | 'none';
+  };
 }
 
 export interface ScriptOptions {

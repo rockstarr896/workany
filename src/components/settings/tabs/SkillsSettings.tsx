@@ -473,13 +473,14 @@ export function SkillsSettings({
                   >
                     <FolderOpen className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
                     <span className="truncate">
-                      {settings.skillsPath || '~/.workany/skills'}
+                      {settings.skillsPath || `${settings.workDir || '~/.workany'}/skills`}
                     </span>
                   </button>
                   <button
                     onClick={async () => {
-                      const path = await getSkillsDir();
-                      onSettingsChange({ ...settings, skillsPath: path });
+                      // Reset to workDir/skills
+                      const workDir = settings.workDir || (await getSkillsDir()).replace('/skills', '');
+                      onSettingsChange({ ...settings, skillsPath: `${workDir}/skills` });
                     }}
                     className="text-muted-foreground hover:text-foreground border-border hover:bg-accent h-10 cursor-pointer rounded-lg border px-3 text-sm transition-colors"
                   >

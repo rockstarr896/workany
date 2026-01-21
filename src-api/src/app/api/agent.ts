@@ -80,6 +80,7 @@ agent.post('/execute', async (c) => {
     taskId?: string;
     modelConfig?: { apiKey?: string; baseUrl?: string; model?: string };
     sandboxConfig?: SandboxConfig;
+    skillsPath?: string;
   }>();
 
   if (!body.planId) {
@@ -100,7 +101,8 @@ agent.post('/execute', async (c) => {
       body.workDir,
       body.taskId,
       body.modelConfig,
-      body.sandboxConfig
+      body.sandboxConfig,
+      body.skillsPath
     )
   );
 
@@ -135,7 +137,8 @@ agent.post('/', async (c) => {
       body.taskId,
       body.modelConfig,
       body.sandboxConfig,
-      body.images
+      body.images,
+      body.skillsPath
     )
   );
 

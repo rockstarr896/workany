@@ -123,6 +123,8 @@ export interface AgentOptions {
   sandbox?: SandboxConfig;
   /** Image attachments for vision capabilities */
   images?: ImageAttachment[];
+  /** Custom skills directory path */
+  skillsPath?: string;
 }
 
 export interface PlanOptions extends AgentOptions {
@@ -136,6 +138,8 @@ export interface ExecuteOptions extends AgentOptions {
   originalPrompt: string;
   /** Sandbox configuration */
   sandbox?: SandboxConfig;
+  /** Plan object (optional - if not provided, will look up by planId) */
+  plan?: TaskPlan;
 }
 
 // ============================================================================

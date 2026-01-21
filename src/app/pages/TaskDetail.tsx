@@ -36,6 +36,7 @@ import { QuestionInput } from '@/components/task/QuestionInput';
 import { RightSidebar } from '@/components/task/RightSidebar';
 import { ToolExecutionItem } from '@/components/task/ToolExecutionItem';
 import { ChatInput } from '@/components/shared/ChatInput';
+import { SettingsModal } from '@/components/settings';
 
 interface LocationState {
   prompt?: string;
@@ -700,7 +701,7 @@ function TaskDetailContent() {
             >
               <div
                 className={cn(
-                  'w-full px-6 py-4',
+                  'w-full px-6 pt-4 pb-24',
                   !isPreviewVisible && !isRightSidebarVisible && 'max-w-[800px]'
                 )}
               >
@@ -1334,23 +1335,66 @@ function MessageItem({
   }
 
   if (message.type === 'error') {
-    return (
-      <div className="flex items-start gap-3 py-2">
-        <div className="mt-0.5 flex size-5 shrink-0 items-center justify-center">
-          <svg
-            viewBox="0 0 16 16"
-            className="text-destructive size-4"
-            fill="currentColor"
-          >
-            <path d="M8 1a7 7 0 100 14A7 7 0 008 1zM7 4.5a1 1 0 112 0v3a1 1 0 11-2 0v-3zm1 7a1 1 0 100-2 1 1 0 000 2z" />
-          </svg>
-        </div>
-        <p className="text-muted-foreground text-sm">{message.message}</p>
-      </div>
-    );
+    return <ErrorMessage message={message.message || ''} />;
   }
 
   return null;
+}
+
+// Error Message Component with API key detection
+function ErrorMessage({ message }: { message: string }) {
+  const { t } = useLanguage();
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  // Check if error is related to API key configuration
+  const isApiKeyError = /invalid api key|api key|authentication|unauthorized|please run \/login/i.test(message);
+
+  if (isApiKeyError) {
+    return (
+      <>
+        <div className="flex items-start gap-3 py-2">
+          <div className="mt-0.5 flex size-5 shrink-0 items-center justify-center">
+            <svg
+              viewBox="0 0 16 16"
+              className="text-destructive size-4"
+              fill="currentColor"
+            >
+              <path d="M8 1a7 7 0 100 14A7 7 0 008 1zM7 4.5a1 1 0 112 0v3a1 1 0 11-2 0v-3zm1 7a1 1 0 100-2 1 1 0 000 2z" />
+            </svg>
+          </div>
+          <div className="flex flex-col gap-1">
+            <p className="text-muted-foreground text-sm">{t.task.apiKeyError}</p>
+            <button
+              onClick={() => setSettingsOpen(true)}
+              className="text-primary hover:text-primary/80 cursor-pointer text-sm underline underline-offset-2 text-left"
+            >
+              {t.task.configureModel}
+            </button>
+          </div>
+        </div>
+        <SettingsModal
+          open={settingsOpen}
+          onOpenChange={setSettingsOpen}
+          initialCategory="model"
+        />
+      </>
+    );
+  }
+
+  return (
+    <div className="flex items-start gap-3 py-2">
+      <div className="mt-0.5 flex size-5 shrink-0 items-center justify-center">
+        <svg
+          viewBox="0 0 16 16"
+          className="text-destructive size-4"
+          fill="currentColor"
+        >
+          <path d="M8 1a7 7 0 100 14A7 7 0 008 1zM7 4.5a1 1 0 112 0v3a1 1 0 11-2 0v-3zm1 7a1 1 0 100-2 1 1 0 000 2z" />
+        </svg>
+      </div>
+      <p className="text-muted-foreground text-sm">{message}</p>
+    </div>
+  );
 }
 
 // Running indicator component - shows current activity

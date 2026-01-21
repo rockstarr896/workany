@@ -28,12 +28,20 @@ import { AboutSettings } from './tabs/AboutSettings';
 interface SettingsModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  initialCategory?: SettingsCategory;
 }
 
-export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
+export function SettingsModal({ open, onOpenChange, initialCategory }: SettingsModalProps) {
   const [settings, setSettings] = useState<SettingsType>(getSettings);
   const [activeCategory, setActiveCategory] =
-    useState<SettingsCategory>('account');
+    useState<SettingsCategory>(initialCategory || 'account');
+
+  // Update active category when initialCategory changes
+  useEffect(() => {
+    if (initialCategory && open) {
+      setActiveCategory(initialCategory);
+    }
+  }, [initialCategory, open]);
   const [defaultPaths, setDefaultPaths] = useState({
     workDir: '',
     mcpConfigPath: '',

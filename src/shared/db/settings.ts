@@ -1,6 +1,6 @@
 // Settings types and storage for AI provider configuration
 
-import { getAppDataDir, getMcpConfigPath, getSkillsDir } from '../lib/paths';
+import { getAppDataDir, getMcpConfigPath } from '../lib/paths';
 
 export interface AIProvider {
   id: string;
@@ -255,7 +255,7 @@ export const defaultSettings: Settings = {
   workDir: '', // Will be resolved to app data dir at init
   sandboxEnabled: true,
   sandboxProviders: defaultSandboxProviders,
-  defaultSandboxProvider: 'claude', // Default to Claude sandbox
+  defaultSandboxProvider: 'boxlite', // Default to BoxLite VM sandbox
   agentRuntimes: defaultAgentRuntimes,
   defaultAgentRuntime: 'claude', // Default to Claude Code
   theme: 'system',
@@ -423,10 +423,9 @@ export function saveSettings(settings: Settings): void {
 // Initialize settings - call this on app startup
 export async function initializeSettings(): Promise<Settings> {
   // Resolve platform-specific paths
-  const [appDataDir, mcpConfigPath, skillsPath] = await Promise.all([
+  const [appDataDir, mcpConfigPath] = await Promise.all([
     getAppDataDir(),
     getMcpConfigPath(),
-    getSkillsDir(),
   ]);
 
   const settings = await getSettingsAsync();
@@ -438,8 +437,9 @@ export async function initializeSettings(): Promise<Settings> {
   if (!settings.mcpConfigPath) {
     settings.mcpConfigPath = mcpConfigPath;
   }
+  // Default skillsPath to workDir/skills (not system default)
   if (!settings.skillsPath) {
-    settings.skillsPath = skillsPath;
+    settings.skillsPath = `${settings.workDir}/skills`;
   }
 
   settingsCache = settings;
@@ -448,7 +448,7 @@ export async function initializeSettings(): Promise<Settings> {
   if (
     settings.workDir === appDataDir ||
     settings.mcpConfigPath === mcpConfigPath ||
-    settings.skillsPath === skillsPath
+    settings.skillsPath === `${settings.workDir}/skills`
   ) {
     await saveSettingsAsync(settings);
   }

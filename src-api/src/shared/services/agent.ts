@@ -166,18 +166,32 @@ export async function* runExecutionPhase(
   workDir?: string,
   taskId?: string,
   modelConfig?: { apiKey?: string; baseUrl?: string; model?: string },
-  sandboxConfig?: SandboxConfig
+  sandboxConfig?: SandboxConfig,
+  skillsPath?: string
 ): AsyncGenerator<AgentMessage> {
   const agent = getAgent(modelConfig);
 
+  // Get the plan from global store to pass to agent
+  // This is necessary because each agent instance has its own plan store
+  const plan = getPlan(planId);
+  if (!plan) {
+    yield { type: 'error', message: `Plan not found: ${planId}` };
+    yield { type: 'done' };
+    return;
+  }
+
+  console.log(`[AgentService] Executing plan: ${planId} (${plan.goal})`);
+
   for await (const message of agent.execute({
     planId,
+    plan, // Pass the plan directly so agent doesn't need to look it up
     originalPrompt,
     sessionId: session.id,
     cwd: workDir,
     taskId,
     abortController: session.abortController,
     sandbox: sandboxConfig,
+    skillsPath,
   })) {
     yield message;
   }
@@ -194,7 +208,8 @@ export async function* runAgent(
   taskId?: string,
   modelConfig?: { apiKey?: string; baseUrl?: string; model?: string },
   sandboxConfig?: SandboxConfig,
-  images?: ImageAttachment[]
+  images?: ImageAttachment[],
+  skillsPath?: string
 ): AsyncGenerator<AgentMessage> {
   const agent = getAgent(modelConfig);
 
@@ -206,6 +221,7 @@ export async function* runAgent(
     abortController: session.abortController,
     sandbox: sandboxConfig,
     images,
+    skillsPath,
   })) {
     yield message;
   }

@@ -94,15 +94,23 @@ function getResultInfo(
     return { hasContent: false, summary: 'Running...' };
   }
 
-  const output = result.output || result.content || '';
-  const isError = result.isError || output.toLowerCase().includes('error');
+  let output = result.output || result.content || '';
+
+  // Extract content from <tool_use_error> tag if present
+  const toolUseErrorMatch = output.match(/<tool_use_error>([\s\S]*?)<\/tool_use_error>/);
+  if (toolUseErrorMatch) {
+    output = toolUseErrorMatch[1].trim();
+  }
+
+  const isError = result.isError || output.toLowerCase().includes('error') || toolUseErrorMatch;
 
   if (isError) {
-    // Try to extract error message
-    const errorMatch = output.match(/error[:\s]+(.{0,50})/i);
+    // Show first line or truncated output as error summary
+    const firstLine = output.split('\n').find((l) => l.trim()) || output;
+    const truncated = firstLine.length > 80 ? firstLine.slice(0, 80) + '...' : firstLine;
     return {
       hasContent: true,
-      summary: errorMatch ? `Error: ${errorMatch[1]}...` : 'Error occurred',
+      summary: truncated || 'Error occurred',
     };
   }
 
@@ -190,11 +198,14 @@ function ToolDetailModal({
 
   const formatOutput = (output: string | undefined): string => {
     if (!output) return 'No output';
+    // Extract content from <tool_use_error> tag if present
+    const toolUseErrorMatch = output.match(/<tool_use_error>([\s\S]*?)<\/tool_use_error>/);
+    let cleanOutput = toolUseErrorMatch ? toolUseErrorMatch[1].trim() : output;
     // Truncate very long output
-    if (output.length > 10000) {
-      return output.slice(0, 10000) + '\n\n... (truncated)';
+    if (cleanOutput.length > 10000) {
+      return cleanOutput.slice(0, 10000) + '\n\n... (truncated)';
     }
-    return output;
+    return cleanOutput;
   };
 
   return (

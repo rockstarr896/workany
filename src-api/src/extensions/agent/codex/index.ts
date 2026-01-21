@@ -486,12 +486,16 @@ Please respond ONLY with JSON in this exact format, no other text:
     const session = this.createSession('executing');
     yield { type: 'session', sessionId: session.id };
 
-    const plan = this.getPlan(options.planId);
+    // Use the plan passed in options, or fall back to local lookup
+    const plan = options.plan || this.getPlan(options.planId);
     if (!plan) {
-      yield { type: 'error', message: 'Plan not found' };
+      console.error(`[Codex ${session.id}] Plan not found: ${options.planId}`);
+      yield { type: 'error', message: `Plan not found: ${options.planId}` };
       yield { type: 'done' };
       return;
     }
+
+    console.log(`[Codex ${session.id}] Using plan: ${plan.id} (${plan.goal})`);
 
     const sessionCwd = await getSessionWorkDir(
       this.config.workDir || options.cwd,
