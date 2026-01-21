@@ -266,6 +266,9 @@ providersRoutes.post('/settings/sync', async (c) => {
       sandboxConfig?: Record<string, unknown>;
       agentProvider?: string;
       agentConfig?: Record<string, unknown>;
+      // AI Provider model configuration
+      defaultProvider?: string;
+      defaultModel?: string;
     }>();
 
     const manager = getProviderManager();
@@ -280,12 +283,24 @@ providersRoutes.post('/settings/sync', async (c) => {
     }
 
     // Update agent provider if specified
+    // The agentConfig now includes apiKey, baseUrl, and model from the selected AI provider
     if (body.agentProvider) {
       await manager.switchAgentProvider(body.agentProvider, body.agentConfig);
     }
 
-    // Update config loader
-    configLoader.updateFromSettings(body);
+    // Update config loader with full settings including model info
+    configLoader.updateFromSettings({
+      ...body,
+      agentConfig: body.agentConfig,
+    });
+
+    console.log('[ProvidersAPI] Settings synced:', {
+      agentProvider: body.agentProvider,
+      defaultProvider: body.defaultProvider,
+      defaultModel: body.defaultModel,
+      hasApiKey: !!body.agentConfig?.apiKey,
+      hasBaseUrl: !!body.agentConfig?.baseUrl,
+    });
 
     return c.json({
       success: true,

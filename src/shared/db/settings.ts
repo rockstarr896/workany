@@ -560,11 +560,40 @@ export function getDefaultAgentRuntime(): AgentRuntimeSetting | undefined {
 import { API_BASE_URL } from '@/config';
 
 /**
+ * Get the current default AI provider (for model configuration)
+ */
+export function getDefaultAIProvider(): AIProvider | undefined {
+  const settings = getSettings();
+  return settings.providers.find((p) => p.id === settings.defaultProvider);
+}
+
+/**
  * Sync settings with the backend API
  * This ensures the backend uses the same provider configuration as the frontend
  */
 export async function syncSettingsWithBackend(): Promise<void> {
   const settings = getSettings();
+
+  // Get the selected AI provider's configuration
+  const aiProvider = getDefaultAIProvider();
+
+  // Build agent config with model information
+  const agentConfig: Record<string, unknown> = {
+    ...getDefaultAgentRuntime()?.config,
+  };
+
+  // If a custom AI provider is selected (not 'default'), use its configuration
+  if (settings.defaultProvider !== 'default' && aiProvider) {
+    if (aiProvider.apiKey) {
+      agentConfig.apiKey = aiProvider.apiKey;
+    }
+    if (aiProvider.baseUrl) {
+      agentConfig.baseUrl = aiProvider.baseUrl;
+    }
+    if (settings.defaultModel) {
+      agentConfig.model = settings.defaultModel;
+    }
+  }
 
   try {
     const response = await fetch(`${API_BASE_URL}/providers/settings/sync`, {
@@ -574,7 +603,10 @@ export async function syncSettingsWithBackend(): Promise<void> {
         sandboxProvider: settings.defaultSandboxProvider,
         sandboxConfig: getDefaultSandboxProvider()?.config,
         agentProvider: settings.defaultAgentRuntime,
-        agentConfig: getDefaultAgentRuntime()?.config,
+        agentConfig: agentConfig,
+        // Also send the AI provider info for clarity
+        defaultProvider: settings.defaultProvider,
+        defaultModel: settings.defaultModel,
       }),
     });
 

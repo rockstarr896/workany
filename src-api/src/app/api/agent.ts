@@ -49,6 +49,16 @@ const SSE_HEADERS = {
 agent.post('/plan', async (c) => {
   const body = await c.req.json<AgentRequest>();
 
+  console.log('[AgentAPI] POST /plan received:', {
+    hasPrompt: !!body.prompt,
+    hasModelConfig: !!body.modelConfig,
+    modelConfig: body.modelConfig ? {
+      hasApiKey: !!body.modelConfig.apiKey,
+      baseUrl: body.modelConfig.baseUrl,
+      model: body.modelConfig.model,
+    } : null,
+  });
+
   if (!body.prompt) {
     return c.json({ error: 'prompt is required' }, 400);
   }
@@ -100,6 +110,16 @@ agent.post('/execute', async (c) => {
 // Legacy: Direct execution (plan + execute in one call)
 agent.post('/', async (c) => {
   const body = await c.req.json<AgentRequest>();
+
+  console.log('[AgentAPI] POST / received:', {
+    hasPrompt: !!body.prompt,
+    hasModelConfig: !!body.modelConfig,
+    modelConfig: body.modelConfig ? {
+      hasApiKey: !!body.modelConfig.apiKey,
+      baseUrl: body.modelConfig.baseUrl,
+      model: body.modelConfig.model,
+    } : null,
+  });
 
   if (!body.prompt) {
     return c.json({ error: 'prompt is required' }, 400);

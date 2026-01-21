@@ -3,6 +3,7 @@ import ImageLogo from '@/assets/logo.png';
 import {
   getSettings,
   saveSettings,
+  syncSettingsWithBackend,
   type Settings as SettingsType,
 } from '@/shared/db/settings';
 import {
@@ -79,6 +80,10 @@ export function SettingsModal({ open, onOpenChange }: SettingsModalProps) {
   const handleSettingsChange = (newSettings: SettingsType) => {
     setSettings(newSettings);
     saveSettings(newSettings);
+    // Sync model configuration with backend
+    syncSettingsWithBackend().catch((error) => {
+      console.error('[Settings] Failed to sync with backend:', error);
+    });
   };
 
   return (

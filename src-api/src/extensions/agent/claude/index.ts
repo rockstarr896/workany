@@ -677,6 +677,13 @@ export class ClaudeAgent extends BaseAgent {
 
   constructor(config: AgentConfig) {
     super(config);
+    console.log('[ClaudeAgent] Created with config:', {
+      provider: config.provider,
+      hasApiKey: !!config.apiKey,
+      baseUrl: config.baseUrl,
+      model: config.model,
+      workDir: config.workDir,
+    });
   }
 
   /**
@@ -693,10 +700,18 @@ export class ClaudeAgent extends BaseAgent {
     // Override with config values if provided
     if (this.config.apiKey) {
       env.ANTHROPIC_API_KEY = this.config.apiKey;
+      console.log('[ClaudeAgent] Using custom API key from config');
+    } else {
+      console.log('[ClaudeAgent] Using API key from environment:', env.ANTHROPIC_API_KEY ? 'present' : 'missing');
     }
     if (this.config.baseUrl) {
       env.ANTHROPIC_BASE_URL = this.config.baseUrl;
+      console.log('[ClaudeAgent] Using custom base URL:', this.config.baseUrl);
+    } else {
+      console.log('[ClaudeAgent] Using base URL from environment:', env.ANTHROPIC_BASE_URL || 'default');
     }
+
+    console.log('[ClaudeAgent] Model to use:', this.config.model || 'default from SDK');
 
     return env;
   }

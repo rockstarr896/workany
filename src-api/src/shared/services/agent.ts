@@ -32,14 +32,27 @@ const globalPlanStore = new Map<string, TaskPlan>();
  * If modelConfig is provided, creates a new agent with those settings
  */
 export function getAgent(config?: Partial<AgentConfig>): IAgent {
+  console.log('[AgentService] getAgent called with config:', {
+    hasConfig: !!config,
+    hasApiKey: !!config?.apiKey,
+    hasBaseUrl: !!config?.baseUrl,
+    model: config?.model,
+  });
+
   // If config with API credentials is provided, create a new agent instance
   // Don't cache it to allow different configs per request
   if (config && (config.apiKey || config.baseUrl || config.model)) {
+    console.log('[AgentService] Creating new agent with custom config:', {
+      hasApiKey: !!config.apiKey,
+      baseUrl: config.baseUrl,
+      model: config.model,
+    });
     return createAgent({ provider: 'claude', ...config });
   }
 
   // Use cached global agent for default configuration
   if (!globalAgent || config) {
+    console.log('[AgentService] Creating agent from environment variables');
     globalAgent = config
       ? createAgent({ provider: 'claude', ...config })
       : createAgentFromEnv();

@@ -61,14 +61,28 @@ function getModelConfig():
   try {
     const settings = getSettings();
 
+    console.log('[useAgent] getModelConfig called:', {
+      defaultProvider: settings.defaultProvider,
+      defaultModel: settings.defaultModel,
+      providersCount: settings.providers.length,
+    });
+
     // If using "default" provider, return undefined to use environment variables
     if (settings.defaultProvider === 'default') {
+      console.log('[useAgent] Using default provider (environment variables)');
       return undefined;
     }
 
     const provider = settings.providers.find(
       (p) => p.id === settings.defaultProvider
     );
+
+    console.log('[useAgent] Found provider:', provider ? {
+      id: provider.id,
+      name: provider.name,
+      hasApiKey: !!provider.apiKey,
+      hasBaseUrl: !!provider.baseUrl,
+    } : 'NOT FOUND');
 
     if (!provider) return undefined;
 
@@ -87,11 +101,19 @@ function getModelConfig():
 
     // Return undefined if no custom config
     if (!config.apiKey && !config.baseUrl && !config.model) {
+      console.log('[useAgent] No custom config found, returning undefined');
       return undefined;
     }
 
+    console.log('[useAgent] Returning modelConfig:', {
+      hasApiKey: !!config.apiKey,
+      baseUrl: config.baseUrl,
+      model: config.model,
+    });
+
     return config;
-  } catch {
+  } catch (error) {
+    console.error('[useAgent] getModelConfig error:', error);
     return undefined;
   }
 }
