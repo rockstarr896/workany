@@ -23,6 +23,7 @@ import { WorkplaceSettings } from './tabs/WorkplaceSettings';
 import { ModelSettings } from './tabs/ModelSettings';
 import { MCPSettings } from './tabs/MCPSettings';
 import { SkillsSettings } from './tabs/SkillsSettings';
+import { DataSettings } from './tabs/DataSettings';
 import { AboutSettings } from './tabs/AboutSettings';
 
 interface SettingsModalProps {
@@ -57,6 +58,7 @@ export function SettingsModal({ open, onOpenChange, initialCategory }: SettingsM
     'model',
     'mcp',
     'skills',
+    'data',
     'about',
   ];
 
@@ -188,6 +190,8 @@ export function SettingsModal({ open, onOpenChange, initialCategory }: SettingsM
                   onSettingsChange={handleSettingsChange}
                 />
               )}
+
+              {activeCategory === 'data' && <DataSettings />}
 
               {activeCategory === 'about' && <AboutSettings />}
             </div>

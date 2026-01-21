@@ -1,12 +1,12 @@
 {
   "name": "workany-api",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "type": "module",
   "scripts": {
     "dev": "node --import tsx --watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "bundle": "esbuild src/index.ts --bundle --platform=node --format=cjs --outfile=dist/bundle.cjs --external:@boxlite-ai/boxlite",
+    "bundle": "esbuild src/index.ts --bundle --platform=node --format=cjs --outfile=dist/bundle.cjs",
     "build:binary": "pnpm bundle && pkg dist/bundle.cjs --targets node20-macos-arm64 --output dist/workany-api-aarch64-apple-darwin --options expose-gc",
     "build:binary:linux": "pnpm bundle && pkg dist/bundle.cjs --targets node20-linux-x64 --output dist/workany-api-x86_64-unknown-linux-gnu --options expose-gc",
     "build:binary:windows": "pnpm bundle && pkg dist/bundle.cjs --targets node20-win-x64 --output dist/workany-api-x86_64-pc-windows-msvc.exe --options expose-gc",
@@ -19,7 +19,6 @@
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.7",
     "@anthropic-ai/sandbox-runtime": "^0.0.28",
-    "@boxlite-ai/boxlite": "^0.1.6",
     "@hono/node-server": "^1.14.1",
     "@modelcontextprotocol/sdk": "^1.25.2",
     "hono": "^4.7.10",
@@ -46,9 +45,6 @@
   },
   "pkg": {
     "scripts": "dist/**/*.js",
-    "assets": [
-      "node_modules/@boxlite-ai/boxlite/**/*"
-    ],
     "outputPath": "dist"
   }
 }

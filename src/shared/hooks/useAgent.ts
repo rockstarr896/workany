@@ -175,7 +175,7 @@ function getModelConfig():
 
 // Helper to get sandbox configuration from settings
 function getSandboxConfig():
-  | { enabled: boolean; apiEndpoint?: string }
+  | { enabled: boolean; provider?: string; apiEndpoint?: string }
   | undefined {
   try {
     const settings = getSettings();
@@ -187,6 +187,7 @@ function getSandboxConfig():
 
     return {
       enabled: true,
+      provider: settings.defaultSandboxProvider, // Use selected sandbox provider
       apiEndpoint: AGENT_SERVER_URL, // Use the same server
     };
   } catch {

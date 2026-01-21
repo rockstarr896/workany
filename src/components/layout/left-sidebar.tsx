@@ -11,12 +11,15 @@ import {
   FileText,
   Globe,
   ListTodo,
+  MoreHorizontal,
   PanelLeft,
   PanelLeftOpen,
   Settings,
   Smartphone,
   Sparkles,
   SquarePen,
+  Star,
+  Trash2,
   User,
 } from 'lucide-react';
 
@@ -42,6 +45,57 @@ import { useSidebar } from './sidebar-context';
 interface LeftSidebarProps {
   tasks: Task[];
   currentTaskId?: string;
+  onDeleteTask?: (taskId: string) => void;
+  onToggleFavorite?: (taskId: string, favorite: boolean) => void;
+}
+
+// Delete confirmation dialog component
+function DeleteConfirmDialog({
+  open,
+  onOpenChange,
+  onConfirm,
+  t,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onConfirm: () => void;
+  t: ReturnType<typeof useLanguage>['t'];
+}) {
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div
+        className="absolute inset-0 bg-black/50"
+        onClick={() => onOpenChange(false)}
+      />
+      <div className="bg-background border-border relative w-[400px] max-w-[90vw] rounded-lg border p-6 shadow-xl">
+        <h3 className="text-foreground text-lg font-semibold">
+          {t.common.deleteTaskConfirm}
+        </h3>
+        <p className="text-muted-foreground mt-2 text-sm">
+          {t.common.deleteTaskDescription}
+        </p>
+        <div className="mt-6 flex justify-end gap-3">
+          <button
+            onClick={() => onOpenChange(false)}
+            className="border-border hover:bg-accent rounded-lg border px-4 py-2 text-sm transition-colors"
+          >
+            {t.common.cancel}
+          </button>
+          <button
+            onClick={() => {
+              onConfirm();
+              onOpenChange(false);
+            }}
+            className="rounded-lg bg-red-500 px-4 py-2 text-sm text-white transition-colors hover:bg-red-600"
+          >
+            {t.common.delete}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // Get icon for task based on prompt content
@@ -62,7 +116,12 @@ function getTaskIcon(prompt: string) {
   return Calendar;
 }
 
-export function LeftSidebar({ tasks, currentTaskId }: LeftSidebarProps) {
+export function LeftSidebar({
+  tasks,
+  currentTaskId,
+  onDeleteTask,
+  onToggleFavorite,
+}: LeftSidebarProps) {
   const navigate = useNavigate();
   const { leftOpen, toggleLeft } = useSidebar();
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -71,6 +130,34 @@ export function LeftSidebar({ tasks, currentTaskId }: LeftSidebarProps) {
     avatar: '',
   });
   const { t } = useLanguage();
+
+  // Delete confirmation dialog state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [taskToDelete, setTaskToDelete] = useState<string | null>(null);
+
+  const handleDeleteClick = (taskId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setTaskToDelete(taskId);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleConfirmDelete = () => {
+    if (taskToDelete && onDeleteTask) {
+      onDeleteTask(taskToDelete);
+      // If deleting current task, navigate to home
+      if (taskToDelete === currentTaskId) {
+        navigate('/');
+      }
+    }
+    setTaskToDelete(null);
+  };
+
+  const handleToggleFavorite = (task: Task, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onToggleFavorite) {
+      onToggleFavorite(task.id, !task.favorite);
+    }
+  };
 
   // Load profile from settings
   useEffect(() => {
@@ -158,19 +245,70 @@ export function LeftSidebar({ tasks, currentTaskId }: LeftSidebarProps) {
                 {tasks.slice(0, 10).map((task) => {
                   const TaskIcon = getTaskIcon(task.prompt);
                   return (
-                    <button
+                    <div
                       key={task.id}
-                      onClick={() => handleSelectTask(task.id)}
                       className={cn(
-                        'flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2 py-2 transition-all duration-200',
+                        'group relative flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2 py-2 transition-all duration-200',
                         currentTaskId === task.id
                           ? 'bg-sidebar-accent text-sidebar-accent-foreground shadow-sm'
                           : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
                       )}
+                      onClick={() => handleSelectTask(task.id)}
                     >
                       <TaskIcon className="size-4 shrink-0" />
-                      <span className="truncate text-sm">{task.prompt}</span>
-                    </button>
+                      <span className="min-w-0 flex-1 truncate text-sm">
+                        {task.prompt}
+                      </span>
+                      {/* Favorite star / More menu button - same position */}
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            onClick={(e) => e.stopPropagation()}
+                            className="flex size-6 shrink-0 items-center justify-center rounded transition-all"
+                          >
+                            {/* Show star when favorited (hide on hover), show menu icon on hover */}
+                            {task.favorite ? (
+                              <>
+                                <Star className="size-4 fill-amber-400 text-amber-400 group-hover:hidden" />
+                                <MoreHorizontal className="text-sidebar-foreground/40 hover:text-sidebar-foreground hidden size-4 group-hover:block" />
+                              </>
+                            ) : (
+                              <MoreHorizontal className="text-sidebar-foreground/40 hover:text-sidebar-foreground size-4 opacity-0 group-hover:opacity-100" />
+                            )}
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent
+                          align="end"
+                          sideOffset={4}
+                          className="min-w-[140px]"
+                        >
+                          <DropdownMenuItem
+                            className="cursor-pointer"
+                            onClick={(e) => handleToggleFavorite(task, e)}
+                          >
+                            <Star
+                              className={cn(
+                                'size-4',
+                                task.favorite && 'fill-amber-400 text-amber-400'
+                              )}
+                            />
+                            <span>
+                              {task.favorite
+                                ? t.common.unfavorite
+                                : t.common.favorite}
+                            </span>
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            className="cursor-pointer text-red-500 focus:text-red-500"
+                            onClick={(e) => handleDeleteClick(task.id, e)}
+                          >
+                            <Trash2 className="size-4" />
+                            <span>{t.common.delete}</span>
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
                   );
                 })}
                 {tasks.length > 10 && (
@@ -185,7 +323,7 @@ export function LeftSidebar({ tasks, currentTaskId }: LeftSidebarProps) {
             </div>
 
             {/* Bottom Section - Avatar with Dropdown */}
-            <div className="border-sidebar-border mt-auto shrink-0 border-t p-3">
+            <div className="border-sidebar-border mt-auto shrink-0 border-none p-3">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button className="hover:bg-sidebar-accent group flex w-full cursor-pointer items-center gap-3 rounded-lg p-2 transition-colors duration-200">
@@ -325,21 +463,75 @@ export function LeftSidebar({ tasks, currentTaskId }: LeftSidebarProps) {
                           {tasks.slice(0, 10).map((task) => {
                             const TaskIcon = getTaskIcon(task.prompt);
                             return (
-                              <button
+                              <div
                                 key={task.id}
-                                onClick={() => handleSelectTask(task.id)}
                                 className={cn(
-                                  'flex w-full cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors',
+                                  'group flex w-full cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors',
                                   currentTaskId === task.id
                                     ? 'bg-accent text-accent-foreground'
                                     : 'text-foreground/80 hover:bg-accent/50'
                                 )}
+                                onClick={() => handleSelectTask(task.id)}
                               >
                                 <TaskIcon className="text-muted-foreground size-5 shrink-0" />
-                                <span className="truncate text-sm">
+                                <span className="min-w-0 flex-1 truncate text-sm">
                                   {task.prompt}
                                 </span>
-                              </button>
+                                {/* Favorite star / More menu button - same position */}
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <button
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="flex size-6 shrink-0 items-center justify-center rounded transition-all"
+                                    >
+                                      {/* Show star when favorited (hide on hover), show menu icon on hover */}
+                                      {task.favorite ? (
+                                        <>
+                                          <Star className="size-4 fill-amber-400 text-amber-400 group-hover:hidden" />
+                                          <MoreHorizontal className="text-muted-foreground hover:text-foreground hidden size-4 group-hover:block" />
+                                        </>
+                                      ) : (
+                                        <MoreHorizontal className="text-muted-foreground hover:text-foreground size-4 opacity-0 group-hover:opacity-100" />
+                                      )}
+                                    </button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent
+                                    align="end"
+                                    sideOffset={4}
+                                    className="min-w-[140px]"
+                                  >
+                                    <DropdownMenuItem
+                                      className="cursor-pointer"
+                                      onClick={(e) =>
+                                        handleToggleFavorite(task, e)
+                                      }
+                                    >
+                                      <Star
+                                        className={cn(
+                                          'size-4',
+                                          task.favorite &&
+                                            'fill-amber-400 text-amber-400'
+                                        )}
+                                      />
+                                      <span>
+                                        {task.favorite
+                                          ? t.common.unfavorite
+                                          : t.common.favorite}
+                                      </span>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem
+                                      className="cursor-pointer text-red-500 focus:text-red-500"
+                                      onClick={(e) =>
+                                        handleDeleteClick(task.id, e)
+                                      }
+                                    >
+                                      <Trash2 className="size-4" />
+                                      <span>{t.common.delete}</span>
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
                             );
                           })}
                           {tasks.length > 10 && (
@@ -424,6 +616,14 @@ export function LeftSidebar({ tasks, currentTaskId }: LeftSidebarProps) {
 
       {/* Settings Modal */}
       <SettingsModal open={settingsOpen} onOpenChange={setSettingsOpen} />
+
+      {/* Delete Confirmation Dialog */}
+      <DeleteConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        onConfirm={handleConfirmDelete}
+        t={t}
+      />
     </TooltipProvider>
   );
 }

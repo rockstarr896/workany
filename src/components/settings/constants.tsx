@@ -2,30 +2,15 @@ import type { ComponentType } from 'react';
 import type { SettingsCategory } from './types';
 import {
   Cpu,
+  Database,
   FolderOpen,
   Info,
-  Layers,
   Plug,
+  Server,
   Settings,
+  Sparkles,
   User,
 } from 'lucide-react';
-
-// MCP icon component
-export const McpIcon = ({ className }: { className?: string }) => (
-  <svg
-    className={className}
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M12 2L2 7l10 5 10-5-10-5z" />
-    <path d="M2 17l10 5 10-5" />
-    <path d="M2 12l10 5 10-5" />
-  </svg>
-);
 
 // Category icons mapping
 export const categoryIcons: Record<
@@ -36,9 +21,10 @@ export const categoryIcons: Record<
   general: Settings,
   workplace: FolderOpen,
   model: Cpu,
-  mcp: McpIcon,
-  skills: Layers,
+  mcp: Server,
+  skills: Sparkles,
   connector: Plug,
+  data: Database,
   about: Info,
 };
 

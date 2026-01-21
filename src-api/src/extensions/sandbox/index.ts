@@ -1,7 +1,6 @@
 // Import for registration
 import type { SandboxPlugin } from '@/core/sandbox/plugin';
 import { getSandboxRegistry } from '@/core/sandbox/registry';
-import { boxlitePlugin } from '@/extensions/sandbox/boxlite';
 import { claudePlugin } from '@/extensions/sandbox/claude';
 import { codexPlugin } from '@/extensions/sandbox/codex';
 import { nativePlugin } from '@/extensions/sandbox/native';
@@ -20,12 +19,6 @@ export {
   nativePlugin,
 } from '@/extensions/sandbox/native';
 export {
-  BoxLiteProvider,
-  createBoxLiteProvider,
-  isBoxLiteAvailable,
-  boxlitePlugin,
-} from '@/extensions/sandbox/boxlite';
-export {
   CodexProvider,
   createCodexProvider,
   codexPlugin,
@@ -41,7 +34,6 @@ export {
  */
 export const builtinPlugins: SandboxPlugin[] = [
   nativePlugin,
-  boxlitePlugin,
   codexPlugin,
   claudePlugin,
 ];

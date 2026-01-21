@@ -21,6 +21,7 @@ NC='\033[0m' # No Color
 
 # Global variables
 BUNDLE_CLAUDE_CODE=false
+BUNDLE_CODEX=false
 BUILD_PLATFORM="current"
 SKIP_SIGNING=true  # Default: skip signing for faster builds
 
@@ -331,13 +332,239 @@ SHELL_EOF
     log_info "Bundle size: $bundle_size"
 }
 
-# Update tauri.conf.json to include Claude Code as sidecar
-update_tauri_config() {
-    if [ "$BUNDLE_CLAUDE_CODE" != "true" ]; then
+# Bundle Codex CLI as sidecar
+# This bundles Node.js runtime and Codex package
+bundle_codex() {
+    local target="$1"
+
+    if [ "$BUNDLE_CODEX" != "true" ]; then
+        log_info "Skipping Codex bundling (use --with-codex to enable)"
         return 0
     fi
 
-    log_info "Updating tauri.conf.json to include Claude Code sidecar..."
+    log_info "Bundling Codex CLI with Node.js for $target..."
+
+    local output_dir="$PROJECT_ROOT/src-api/dist"
+    local bundle_dir="$output_dir/codex-bundle"
+
+    # Clean up
+    rm -rf "$bundle_dir"
+    mkdir -p "$bundle_dir"
+
+    # Determine platform-specific settings
+    local node_platform=""
+    local node_arch=""
+    local node_ext=""
+
+    case "$target" in
+        x86_64-unknown-linux-gnu)
+            node_platform="linux"
+            node_arch="x64"
+            ;;
+        x86_64-pc-windows-msvc)
+            node_platform="win"
+            node_arch="x64"
+            node_ext=".exe"
+            ;;
+        x86_64-apple-darwin)
+            node_platform="darwin"
+            node_arch="x64"
+            ;;
+        aarch64-apple-darwin)
+            node_platform="darwin"
+            node_arch="arm64"
+            ;;
+        current)
+            local os_name=$(uname -s)
+            local arch=$(uname -m)
+            case "$os_name" in
+                Darwin)
+                    node_platform="darwin"
+                    node_arch=$([ "$arch" = "arm64" ] && echo "arm64" || echo "x64")
+                    ;;
+                Linux)
+                    node_platform="linux"
+                    node_arch="x64"
+                    ;;
+                *)
+                    node_platform="linux"
+                    node_arch="x64"
+                    ;;
+            esac
+            ;;
+        *)
+            node_platform="linux"
+            node_arch="x64"
+            ;;
+    esac
+
+    # Download Node.js binary
+    local node_version="20.18.0"
+    local node_filename="node-v${node_version}-${node_platform}-${node_arch}"
+    local node_url="https://nodejs.org/dist/v${node_version}/${node_filename}.tar.gz"
+
+    # For Windows, use .zip format
+    if [ "$node_platform" = "win" ]; then
+        node_url="https://nodejs.org/dist/v${node_version}/${node_filename}.zip"
+    fi
+
+    log_info "Downloading Node.js v${node_version} for ${node_platform}-${node_arch}..."
+
+    local temp_dir=$(mktemp -d)
+    cd "$temp_dir"
+
+    # Try to download, fallback to local node if fails
+    if [ "$node_platform" = "win" ]; then
+        if ! curl -fsSL "$node_url" -o node.zip 2>/dev/null; then
+            log_warn "Failed to download Node.js, trying local node..."
+            if command -v node &> /dev/null; then
+                cp "$(which node)" "$bundle_dir/node${node_ext}"
+                chmod +x "$bundle_dir/node${node_ext}" 2>/dev/null || true
+            else
+                log_error "Node.js not available"
+                cd "$PROJECT_ROOT"
+                rm -rf "$temp_dir"
+                return 1
+            fi
+        else
+            unzip -q node.zip
+            cp "${node_filename}/node.exe" "$bundle_dir/node.exe"
+        fi
+    else
+        if ! curl -fsSL "$node_url" | tar xz 2>/dev/null; then
+            log_warn "Failed to download Node.js, trying local node..."
+            if command -v node &> /dev/null; then
+                cp "$(which node)" "$bundle_dir/node${node_ext}"
+                chmod +x "$bundle_dir/node${node_ext}" 2>/dev/null || true
+            else
+                log_error "Node.js not available"
+                cd "$PROJECT_ROOT"
+                rm -rf "$temp_dir"
+                return 1
+            fi
+        else
+            cp "${node_filename}/bin/node" "$bundle_dir/node"
+            chmod +x "$bundle_dir/node"
+        fi
+    fi
+
+    cd "$PROJECT_ROOT"
+    rm -rf "$temp_dir"
+
+    # Verify Node.js binary
+    if [ ! -f "$bundle_dir/node${node_ext}" ]; then
+        log_error "Node.js binary not found"
+        return 1
+    fi
+
+    log_info "Node.js binary ready"
+
+    # Install Codex using npm
+    cd "$bundle_dir"
+    echo '{"name":"codex-bundle","private":true,"type":"module"}' > package.json
+
+    log_info "Installing @openai/codex..."
+    # Use npm mirror for faster download in China
+    npm install @openai/codex --registry="${NPM_REGISTRY:-https://registry.npmmirror.com}" 2>&1 | tail -10
+
+    # Verify installation
+    if [ ! -f "node_modules/@openai/codex/bin/codex.js" ]; then
+        log_error "Codex installation failed"
+        cd "$PROJECT_ROOT"
+        return 1
+    fi
+
+    log_info "Codex installed successfully"
+
+    # Create launcher script
+    local output_name="codex"
+    if [ "$node_platform" = "win" ]; then
+        output_name="codex.cmd"
+        # Windows batch launcher
+        cat > "$output_dir/$output_name" << 'BATCH_EOF'
+@echo off
+setlocal
+set "SCRIPT_DIR=%~dp0"
+set "BUNDLE_DIR=%SCRIPT_DIR%codex-bundle"
+if not exist "%BUNDLE_DIR%\node.exe" set "BUNDLE_DIR=%SCRIPT_DIR%..\Resources\codex-bundle"
+"%BUNDLE_DIR%\node.exe" "%BUNDLE_DIR%\node_modules\@openai\codex\bin\codex.js" %*
+BATCH_EOF
+    else
+        # Unix shell launcher - searches multiple locations for bundle
+        cat > "$output_dir/$output_name" << 'SHELL_EOF'
+#!/bin/bash
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Search for codex-bundle in multiple locations
+# 1. Same directory as launcher (development / Linux)
+# 2. ../Resources/codex-bundle (macOS app bundle)
+# 3. Resources subdirectory
+for DIR in "$SCRIPT_DIR/codex-bundle" "$SCRIPT_DIR/../Resources/codex-bundle" "$SCRIPT_DIR/Resources/codex-bundle"; do
+    if [ -f "$DIR/node" ] && [ -d "$DIR/node_modules/@openai/codex" ]; then
+        BUNDLE_DIR="$DIR"
+        break
+    fi
+done
+
+if [ -z "$BUNDLE_DIR" ]; then
+    echo "Error: codex-bundle not found" >&2
+    echo "Searched in:" >&2
+    echo "  - $SCRIPT_DIR/codex-bundle" >&2
+    echo "  - $SCRIPT_DIR/../Resources/codex-bundle" >&2
+    exit 1
+fi
+
+exec "$BUNDLE_DIR/node" "$BUNDLE_DIR/node_modules/@openai/codex/bin/codex.js" "$@"
+SHELL_EOF
+        chmod +x "$output_dir/$output_name"
+    fi
+
+    cd "$PROJECT_ROOT"
+
+    # Create target-specific launcher (Tauri adds target triple suffix to externalBin)
+    local target_suffix=""
+    case "$target" in
+        x86_64-unknown-linux-gnu|x86_64-pc-windows-msvc|x86_64-apple-darwin|aarch64-apple-darwin)
+            target_suffix="-$target"
+            ;;
+        current)
+            local os_name=$(uname -s)
+            local arch=$(uname -m)
+            case "$os_name" in
+                Darwin)
+                    target_suffix=$([ "$arch" = "arm64" ] && echo "-aarch64-apple-darwin" || echo "-x86_64-apple-darwin")
+                    ;;
+                Linux)
+                    target_suffix="-x86_64-unknown-linux-gnu"
+                    ;;
+            esac
+            ;;
+    esac
+
+    if [ -n "$target_suffix" ]; then
+        local target_launcher="$output_dir/${output_name}${target_suffix}"
+        if [ "$node_platform" = "win" ]; then
+            target_launcher="$output_dir/codex${target_suffix}.cmd"
+        fi
+        cp "$output_dir/$output_name" "$target_launcher"
+        chmod +x "$target_launcher" 2>/dev/null || true
+        log_info "Created target-specific launcher: $target_launcher"
+    fi
+
+    # Verify
+    local bundle_size=$(du -sh "$bundle_dir" 2>/dev/null | cut -f1)
+    log_info "Codex bundling completed for $target"
+    log_info "Output: $output_dir/$output_name"
+    log_info "Bundle size: $bundle_size"
+}
+
+# Update tauri.conf.json to include sidecars (Claude Code and/or Codex)
+update_tauri_config() {
+    if [ "$BUNDLE_CLAUDE_CODE" != "true" ] && [ "$BUNDLE_CODEX" != "true" ]; then
+        return 0
+    fi
+
+    log_info "Updating tauri.conf.json to include sidecar binaries..."
 
     local config_file="$PROJECT_ROOT/src-tauri/tauri.conf.json"
     local backup_file="$PROJECT_ROOT/src-tauri/tauri.conf.json.backup"
@@ -352,27 +579,42 @@ update_tauri_config() {
 const fs = require('fs');
 const config = JSON.parse(fs.readFileSync('$config_file', 'utf8'));
 
-// Add claude to externalBin if not present
+// Ensure arrays exist
 if (!config.bundle.externalBin) {
     config.bundle.externalBin = [];
 }
-if (!config.bundle.externalBin.includes('../src-api/dist/claude')) {
-    config.bundle.externalBin.unshift('../src-api/dist/claude');
-}
-
-// Add claude-bundle directory to resources
 if (!config.bundle.resources) {
     config.bundle.resources = [];
 }
-const bundleResource = '../src-api/dist/claude-bundle/**/*';
-if (!config.bundle.resources.includes(bundleResource)) {
-    config.bundle.resources.push(bundleResource);
+
+// Add Claude Code if bundling is enabled
+if ('$BUNDLE_CLAUDE_CODE' === 'true') {
+    if (!config.bundle.externalBin.includes('../src-api/dist/claude')) {
+        config.bundle.externalBin.unshift('../src-api/dist/claude');
+    }
+    const claudeResource = '../src-api/dist/claude-bundle/**/*';
+    if (!config.bundle.resources.includes(claudeResource)) {
+        config.bundle.resources.push(claudeResource);
+    }
+    console.log('Added Claude Code sidecar config');
+}
+
+// Add Codex if bundling is enabled
+if ('$BUNDLE_CODEX' === 'true') {
+    if (!config.bundle.externalBin.includes('../src-api/dist/codex')) {
+        config.bundle.externalBin.unshift('../src-api/dist/codex');
+    }
+    const codexResource = '../src-api/dist/codex-bundle/**/*';
+    if (!config.bundle.resources.includes(codexResource)) {
+        config.bundle.resources.push(codexResource);
+    }
+    console.log('Added Codex sidecar config');
 }
 
 fs.writeFileSync('$config_file', JSON.stringify(config, null, 2));
 console.log('Config updated successfully');
 "
-    log_info "Updated tauri.conf.json with Claude Code sidecar and bundle resources"
+    log_info "Updated tauri.conf.json with sidecar configurations"
 }
 
 # Update tauri.conf.json to disable signing
@@ -419,8 +661,9 @@ build_linux() {
     # Build API sidecar first
     build_api_sidecar "$target"
 
-    # Bundle Claude Code if requested
+    # Bundle CLI tools if requested
     bundle_claude_code "$target"
+    bundle_codex "$target"
     update_tauri_config
 
     # Add target if not exists
@@ -443,8 +686,9 @@ build_windows() {
     # Build API sidecar first
     build_api_sidecar "$target"
 
-    # Bundle Claude Code if requested
+    # Bundle CLI tools if requested
     bundle_claude_code "$target"
+    bundle_codex "$target"
     update_tauri_config
 
     # Add target if not exists
@@ -467,8 +711,9 @@ build_mac_intel() {
     # Build API sidecar first
     build_api_sidecar "$target"
 
-    # Bundle Claude Code if requested
+    # Bundle CLI tools if requested
     bundle_claude_code "$target"
+    bundle_codex "$target"
     update_tauri_config
 
     # Add target if not exists
@@ -476,10 +721,11 @@ build_mac_intel() {
 
     pnpm tauri build --target "$target"
 
-    # Copy claude-bundle to app bundle (after Tauri build)
+    # Copy bundles to app bundle (after Tauri build)
     copy_claude_bundle_to_app "$target"
+    copy_codex_bundle_to_app "$target"
 
-    # Recreate DMG with claude-bundle included
+    # Recreate DMG with bundles included
     recreate_dmg "$target"
 
     restore_tauri_config
@@ -555,6 +801,73 @@ copy_claude_bundle_to_app() {
     fi
 }
 
+# Copy codex-bundle to app bundle after Tauri build
+copy_codex_bundle_to_app() {
+    local target="$1"
+
+    if [ "$BUNDLE_CODEX" != "true" ]; then
+        return 0
+    fi
+
+    log_info "Copying codex-bundle to app bundle..."
+
+    local app_path=""
+    case "$target" in
+        aarch64-apple-darwin|x86_64-apple-darwin)
+            app_path="$PROJECT_ROOT/src-tauri/target/$target/release/bundle/macos/WorkAny.app/Contents/MacOS"
+            ;;
+        current)
+            # Try to find the app
+            app_path="$PROJECT_ROOT/src-tauri/target/release/bundle/macos/WorkAny.app/Contents/MacOS"
+            if [ ! -d "$app_path" ]; then
+                # Try with arch
+                local arch=$(uname -m)
+                if [ "$arch" = "arm64" ]; then
+                    app_path="$PROJECT_ROOT/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/WorkAny.app/Contents/MacOS"
+                else
+                    app_path="$PROJECT_ROOT/src-tauri/target/x86_64-apple-darwin/release/bundle/macos/WorkAny.app/Contents/MacOS"
+                fi
+            fi
+            ;;
+        *)
+            log_warn "Platform $target may not need bundle copy"
+            return 0
+            ;;
+    esac
+
+    local bundle_src="$PROJECT_ROOT/src-api/dist/codex-bundle"
+
+    if [ ! -d "$bundle_src" ]; then
+        log_error "codex-bundle not found at $bundle_src"
+        return 1
+    fi
+
+    if [ ! -d "$app_path" ]; then
+        log_warn "App bundle not found at $app_path"
+        return 0
+    fi
+
+    # Copy codex-bundle to app bundle
+    cp -r "$bundle_src" "$app_path/"
+    log_info "Copied codex-bundle to $app_path/"
+
+    # Also copy the launcher script (in case Tauri copied an old version)
+    local launcher_src="$PROJECT_ROOT/src-api/dist/codex"
+    if [ -f "$launcher_src" ]; then
+        cp "$launcher_src" "$app_path/codex"
+        chmod +x "$app_path/codex"
+        log_info "Copied codex launcher script to $app_path/"
+    fi
+
+    # Verify
+    if [ -f "$app_path/codex-bundle/node" ]; then
+        log_info "codex-bundle successfully copied to app bundle"
+    else
+        log_error "Failed to copy codex-bundle"
+        return 1
+    fi
+}
+
 # Recreate DMG after modifying app bundle
 recreate_dmg() {
     local target="$1"
@@ -615,8 +928,9 @@ build_mac_arm() {
     # Build API sidecar first
     build_api_sidecar "$target"
 
-    # Bundle Claude Code if requested
+    # Bundle CLI tools if requested
     bundle_claude_code "$target"
+    bundle_codex "$target"
     update_tauri_config
 
     # Add target if not exists
@@ -624,10 +938,11 @@ build_mac_arm() {
 
     pnpm tauri build --target "$target"
 
-    # Copy claude-bundle to app bundle (after Tauri build)
+    # Copy bundles to app bundle (after Tauri build)
     copy_claude_bundle_to_app "$target"
+    copy_codex_bundle_to_app "$target"
 
-    # Recreate DMG with claude-bundle included
+    # Recreate DMG with bundles included
     recreate_dmg "$target"
 
     restore_tauri_config
@@ -643,14 +958,16 @@ build_current() {
     # Build API sidecar first
     build_api_sidecar "current"
 
-    # Bundle Claude Code if requested
+    # Bundle CLI tools if requested
     bundle_claude_code "current"
+    bundle_codex "current"
     update_tauri_config
 
     pnpm tauri build
 
-    # Copy claude-bundle to app bundle
+    # Copy bundles to app bundle
     copy_claude_bundle_to_app "current"
+    copy_codex_bundle_to_app "current"
 
     restore_tauri_config
 
@@ -677,35 +994,43 @@ show_help() {
     echo "  --with-claude   Bundle Claude Code CLI as a sidecar"
     echo "                  This allows the app to work without requiring users"
     echo "                  to install Claude Code separately (no Node.js needed)"
+    echo "  --with-codex    Bundle Codex CLI as a sidecar for sandbox execution"
+    echo "                  This allows out-of-box sandbox support"
     echo "  --sign          Enable code signing and notarization (macOS)"
     echo "                  Default: signing is DISABLED for faster builds"
     echo "  --no-sign       Explicitly disable signing (default behavior)"
     echo ""
     echo "Requirements:"
     echo "  - pnpm"
-    echo "  - Node.js (for API sidecar with BoxLite)"
+    echo "  - Node.js (for API sidecar)"
     echo "  - Rust (cargo, rustup)"
     echo ""
     echo "Examples:"
     echo "  ./scripts/build.sh                        # Build for current platform (no signing)"
     echo "  ./scripts/build.sh mac-arm                # Build for Apple Silicon (fast, no signing)"
     echo "  ./scripts/build.sh mac-arm --with-claude  # Build with bundled Claude Code"
+    echo "  ./scripts/build.sh mac-arm --with-codex   # Build with bundled Codex sandbox"
+    echo "  ./scripts/build.sh mac-arm --with-claude --with-codex  # Full featured build"
     echo "  ./scripts/build.sh mac-arm --sign         # Build with signing and notarization"
-    echo "  ./scripts/build.sh mac-arm --with-claude --sign  # Full release build"
+    echo "  ./scripts/build.sh mac-arm --with-claude --with-codex --sign  # Full release build"
     echo ""
     echo "Note: Cross-compilation requires proper toolchain setup."
     echo "      For CI/CD builds, use GitHub Actions workflow instead."
     echo ""
-    echo "Claude Code bundling:"
+    echo "CLI bundling:"
     echo "  When --with-claude is specified, the build will:"
     echo "  1. Download and bundle Claude Code CLI"
     echo "  2. Include it as a sidecar binary in the app"
     echo "  3. The app will use bundled Claude Code if user hasn't installed it"
-    echo "  4. User-installed Claude Code takes priority over bundled version"
+    echo ""
+    echo "  When --with-codex is specified, the build will:"
+    echo "  1. Download and bundle Codex CLI (OpenAI sandbox)"
+    echo "  2. Include it as a sidecar binary in the app"
+    echo "  3. The app will use bundled Codex for sandbox execution"
 }
 
 # Parse arguments and set global variables
-# Sets: BUNDLE_CLAUDE_CODE, BUILD_PLATFORM, SKIP_SIGNING
+# Sets: BUNDLE_CLAUDE_CODE, BUNDLE_CODEX, BUILD_PLATFORM, SKIP_SIGNING
 parse_args() {
     BUILD_PLATFORM="current"
 
@@ -713,6 +1038,10 @@ parse_args() {
         case "$1" in
             --with-claude)
                 BUNDLE_CLAUDE_CODE=true
+                shift
+                ;;
+            --with-codex)
+                BUNDLE_CODEX=true
                 shift
                 ;;
             --sign)
@@ -742,11 +1071,15 @@ parse_args() {
 
 # Main
 main() {
-    # Parse arguments first (sets BUILD_PLATFORM, BUNDLE_CLAUDE_CODE, SKIP_SIGNING)
+    # Parse arguments first (sets BUILD_PLATFORM, BUNDLE_CLAUDE_CODE, BUNDLE_CODEX, SKIP_SIGNING)
     parse_args "$@"
 
     if [ "$BUNDLE_CLAUDE_CODE" = "true" ]; then
         log_info "Claude Code bundling enabled"
+    fi
+
+    if [ "$BUNDLE_CODEX" = "true" ]; then
+        log_info "Codex CLI bundling enabled"
     fi
 
     if [ "$SKIP_SIGNING" = "true" ]; then
@@ -798,10 +1131,23 @@ main() {
             ;;
     esac
 
+    # Summary
+    local bundled_items=""
     if [ "$BUNDLE_CLAUDE_CODE" = "true" ]; then
-        log_info "Build completed with Claude Code bundled"
+        bundled_items="Claude Code"
+    fi
+    if [ "$BUNDLE_CODEX" = "true" ]; then
+        if [ -n "$bundled_items" ]; then
+            bundled_items="$bundled_items + Codex"
+        else
+            bundled_items="Codex"
+        fi
+    fi
+
+    if [ -n "$bundled_items" ]; then
+        log_info "Build completed with bundled: $bundled_items"
     else
-        log_info "Build completed (Claude Code not bundled)"
+        log_info "Build completed (no CLI tools bundled)"
     fi
 }
 

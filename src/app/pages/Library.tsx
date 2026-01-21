@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getAllTasks, type Task } from '@/shared/db';
+import { deleteTask, getAllTasks, updateTask, type Task } from '@/shared/db';
 import { cn } from '@/shared/lib/utils';
 import { Search } from 'lucide-react';
 
@@ -92,10 +92,36 @@ function LibraryContent() {
     }
   };
 
+  // Handle task deletion
+  const handleDeleteTask = async (taskId: string) => {
+    try {
+      await deleteTask(taskId);
+      setTasks((prev) => prev.filter((t) => t.id !== taskId));
+    } catch (error) {
+      console.error('Failed to delete task:', error);
+    }
+  };
+
+  // Handle favorite toggle
+  const handleToggleFavorite = async (taskId: string, favorite: boolean) => {
+    try {
+      await updateTask(taskId, { favorite });
+      setTasks((prev) =>
+        prev.map((t) => (t.id === taskId ? { ...t, favorite } : t))
+      );
+    } catch (error) {
+      console.error('Failed to update task:', error);
+    }
+  };
+
   return (
     <div className="bg-sidebar flex h-screen overflow-hidden">
       {/* Left Sidebar */}
-      <LeftSidebar tasks={tasks} />
+      <LeftSidebar
+        tasks={tasks}
+        onDeleteTask={handleDeleteTask}
+        onToggleFavorite={handleToggleFavorite}
+      />
 
       {/* Main Content */}
       <main className="bg-background my-2 mr-2 flex flex-1 flex-col overflow-hidden rounded-l-2xl shadow-sm">

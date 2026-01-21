@@ -171,6 +171,14 @@ pub fn run() {
             "#,
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 7,
+            description: "add_favorite_to_tasks",
+            sql: r#"
+                ALTER TABLE tasks ADD COLUMN favorite INTEGER DEFAULT 0;
+            "#,
+            kind: MigrationKind::Up,
+        },
     ];
 
     #[cfg(not(debug_assertions))]

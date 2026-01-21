@@ -60,12 +60,20 @@ export default {
     'All session outputs and files will be saved in this directory. Each conversation creates a subfolder under sessions/.',
   directoryStructure: 'Structure: {path}/sessions/[task-id]/',
 
-  // Sandbox (legacy)
+  // Sandbox
   sandbox: 'Sandbox Mode',
   sandboxDescription:
     'Run scripts in isolated containers for better security and dependency management',
   sandboxAutoDetect:
     'Container runtime will be automatically selected based on script type (Node.js, Python, Bun, etc.)',
+  defaultSandbox: 'Default Sandbox',
+  defaultSandboxDescription: 'Choose the sandbox environment for script execution',
+  sandboxNative: 'Native',
+  sandboxNativeDescription: 'Run directly on host, no isolation',
+  sandboxCodex: 'Codex Sandbox',
+  sandboxCodexDescription: 'Run code in sandbox environment',
+  sandboxClaude: 'Claude Sandbox',
+  sandboxClaudeDescription: 'Run code in sandbox environment',
 
   // Model / Provider
   modelSettings: 'Model Settings',
@@ -153,6 +161,30 @@ export default {
   mcpConfig: 'MCP Config',
   mcpConfigDescription: 'Path to MCP servers configuration file (JSON format)',
   mcpConfigExample: 'Example mcp.json format:',
+
+  // Data
+  data: 'Data',
+  dataDescription: 'Manage your data: export backups, import data, or clear all data.',
+  dataExport: 'Export Data',
+  dataExportDescription: 'Export all tasks, messages, and settings to a JSON file.',
+  dataExportButton: 'Export',
+  dataExporting: 'Exporting...',
+  dataImport: 'Import Data',
+  dataImportDescription: 'Import data from a previously exported JSON file.',
+  dataImportButton: 'Import',
+  dataImporting: 'Importing...',
+  dataClear: 'Clear Data',
+  dataClearDescription: 'Permanently delete all data. This action cannot be undone.',
+  dataClearButton: 'Clear',
+  dataClearing: 'Clearing...',
+  dataSuccess: 'Success',
+  dataClearConfirmTitle: 'Clear Data',
+  dataClearConfirmDescription: 'Choose what data you want to clear:',
+  dataClearTasksOnly: 'Clear Tasks Only',
+  dataClearTasksOnlyDescription: 'Delete all tasks and messages, keep settings',
+  dataClearAll: 'Clear All Data',
+  dataClearAllDescription: 'Delete all tasks, messages, and settings',
+  dataCancel: 'Cancel',
 
   // About
   aiPlatform: 'Desktop Universal Agent',

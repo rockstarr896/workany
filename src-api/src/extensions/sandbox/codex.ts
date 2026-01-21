@@ -26,11 +26,66 @@ import type {
 } from '@/core/sandbox/types';
 
 /**
+ * Get the path to the bundled codex launcher (within the app bundle)
+ */
+function getBundledCodexPath(): string | undefined {
+  const os = platform();
+  const ext = os === 'win32' ? '.cmd' : '';
+
+  // In packaged app, codex launcher is in the same directory as the running binary
+  // or in Resources directory on macOS
+  const possiblePaths: string[] = [];
+
+  // Get the directory of the current executable
+  const execDir = process.execPath ? path.dirname(process.execPath) : '';
+
+  if (execDir) {
+    // Same directory as executable (Linux/Windows)
+    possiblePaths.push(path.join(execDir, `codex${ext}`));
+
+    // macOS app bundle: Contents/MacOS/codex or Contents/Resources/codex-bundle
+    if (os === 'darwin') {
+      possiblePaths.push(path.join(execDir, 'codex'));
+      possiblePaths.push(
+        path.join(execDir, '..', 'Resources', 'codex-bundle', 'node')
+      );
+    }
+  }
+
+  // Development: check dist directory
+  possiblePaths.push(
+    path.join(__dirname, '..', '..', '..', 'dist', `codex${ext}`)
+  );
+  possiblePaths.push(
+    path.join(__dirname, '..', '..', '..', '..', 'dist', `codex${ext}`)
+  );
+
+  for (const p of possiblePaths) {
+    if (existsSync(p)) {
+      console.log(`[CodexProvider] Found bundled codex at: ${p}`);
+      return p;
+    }
+  }
+
+  return undefined;
+}
+
+/**
  * Get the path to the codex executable
+ * Priority: CODEX_PATH env > which/where > common paths > bundled
  */
 function getCodexPath(): string | undefined {
   const os = platform();
 
+  // Check CODEX_PATH env var first (highest priority - user override)
+  if (process.env.CODEX_PATH && existsSync(process.env.CODEX_PATH)) {
+    console.log(
+      `[CodexProvider] Using CODEX_PATH: ${process.env.CODEX_PATH}`
+    );
+    return process.env.CODEX_PATH;
+  }
+
+  // Try system-installed codex via which/where
   try {
     if (os === 'win32') {
       const whereResult = execSync('where codex', {
@@ -39,6 +94,7 @@ function getCodexPath(): string | undefined {
       }).trim();
       const firstPath = whereResult.split('\n')[0];
       if (firstPath && existsSync(firstPath)) {
+        console.log(`[CodexProvider] Found system codex at: ${firstPath}`);
         return firstPath;
       }
     } else {
@@ -47,6 +103,7 @@ function getCodexPath(): string | undefined {
         stdio: 'pipe',
       }).trim();
       if (whichResult && existsSync(whichResult)) {
+        console.log(`[CodexProvider] Found system codex at: ${whichResult}`);
         return whichResult;
       }
     }
@@ -66,13 +123,16 @@ function getCodexPath(): string | undefined {
 
   for (const p of commonPaths) {
     if (existsSync(p)) {
+      console.log(`[CodexProvider] Found codex at common path: ${p}`);
       return p;
     }
   }
 
-  // Check CODEX_PATH env var
-  if (process.env.CODEX_PATH && existsSync(process.env.CODEX_PATH)) {
-    return process.env.CODEX_PATH;
+  // Fallback to bundled codex (lowest priority)
+  const bundledPath = getBundledCodexPath();
+  if (bundledPath) {
+    console.log(`[CodexProvider] Using bundled codex: ${bundledPath}`);
+    return bundledPath;
   }
 
   return undefined;

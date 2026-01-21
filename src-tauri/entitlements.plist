@@ -11,7 +11,7 @@
     <!-- Disable library validation -->
     <key>com.apple.security.cs.disable-library-validation</key>
     <true/>
-    <!-- Allow Hypervisor.framework for BoxLite VM sandboxing -->
+    <!-- Allow Hypervisor.framework for VM sandboxing -->
     <key>com.apple.security.hypervisor</key>
     <true/>
     <!-- Allow Virtualization.framework (alternative VM framework) -->

@@ -2,10 +2,10 @@
  * Sandbox Provider Types
  *
  * Defines the interfaces for extensible sandbox providers.
- * Supports: BoxLite (VM), Docker (Container), Native (Process), E2B, Custom
+ * Supports: Codex (Process), Claude (Container), Native (Process), Docker, E2B
  *
  * The provider type is now a string to support custom extensions.
- * Built-in types: "boxlite", "docker", "native", "e2b"
+ * Built-in types: "codex", "claude", "native", "docker", "e2b"
  */
 
 // ============================================================================
@@ -16,7 +16,6 @@
  * Built-in sandbox provider types
  */
 export type BuiltinSandboxProviderType =
-  | 'boxlite'
   | 'docker'
   | 'native'
   | 'e2b'
@@ -25,7 +24,7 @@ export type BuiltinSandboxProviderType =
 
 /**
  * Sandbox provider type - string to allow custom extensions
- * Built-in types: "boxlite", "docker", "native", "e2b"
+ * Built-in types: "codex", "claude", "native", "docker", "e2b"
  */
 export type SandboxProviderType = BuiltinSandboxProviderType | (string & {});
 
@@ -117,20 +116,6 @@ export interface SandboxProviderConfig {
   config: Record<string, unknown>;
 }
 
-export interface BoxLiteProviderConfig extends SandboxProviderConfig {
-  type: 'boxlite';
-  config: {
-    /** Memory limit in MiB (default: 1024) */
-    memoryMib?: number;
-    /** Number of CPU cores (default: 2) */
-    cpus?: number;
-    /** Default working directory (default: /workspace) */
-    workDir?: string;
-    /** Auto-remove containers after execution */
-    autoRemove?: boolean;
-  };
-}
-
 export interface DockerProviderConfig extends SandboxProviderConfig {
   type: 'docker';
   config: {
@@ -175,7 +160,7 @@ export interface E2BProviderConfig extends SandboxProviderConfig {
 
 /**
  * Base interface for all sandbox providers.
- * Each provider (BoxLite, Docker, Native, etc.) must implement this interface.
+ * Each provider (Codex, Claude, Docker, Native, etc.) must implement this interface.
  */
 export interface ISandboxProvider {
   /** Provider type identifier */

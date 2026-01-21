@@ -26,7 +26,6 @@ export interface MCPServer {
 // ============================================================================
 
 export type SandboxProviderType =
-  | 'boxlite'
   | 'docker'
   | 'native'
   | 'e2b'
@@ -44,6 +43,15 @@ export interface SandboxProviderSetting {
 
 export const defaultSandboxProviders: SandboxProviderSetting[] = [
   {
+    id: 'codex',
+    type: 'codex',
+    name: 'Codex Sandbox',
+    enabled: true,
+    config: {
+      defaultTimeout: 120000,
+    },
+  },
+  {
     id: 'native',
     type: 'native',
     name: 'Native (No Isolation)',
@@ -51,18 +59,6 @@ export const defaultSandboxProviders: SandboxProviderSetting[] = [
     config: {
       shell: '/bin/bash',
       defaultTimeout: 120000,
-    },
-  },
-  {
-    id: 'boxlite',
-    type: 'boxlite',
-    name: 'BoxLite VM',
-    enabled: true,
-    config: {
-      memoryMib: 1024,
-      cpus: 2,
-      workDir: '/workspace',
-      autoRemove: true,
     },
   },
 ];
@@ -255,7 +251,7 @@ export const defaultSettings: Settings = {
   workDir: '', // Will be resolved to app data dir at init
   sandboxEnabled: true,
   sandboxProviders: defaultSandboxProviders,
-  defaultSandboxProvider: 'boxlite', // Default to BoxLite VM sandbox
+  defaultSandboxProvider: 'codex', // Default to Codex sandbox, fallback to native
   agentRuntimes: defaultAgentRuntimes,
   defaultAgentRuntime: 'claude', // Default to Claude Code
   theme: 'system',
@@ -700,4 +696,34 @@ export async function getSettingItem(key: string): Promise<string | null> {
 export async function isSetupCompleted(): Promise<boolean> {
   const value = await getSettingItem('setupCompleted');
   return value === 'true';
+}
+
+/**
+ * Clear all settings and reset to defaults
+ */
+export async function clearAllSettings(): Promise<void> {
+  const database = await getDatabase();
+
+  if (database) {
+    try {
+      await database.execute('DELETE FROM settings');
+    } catch (error) {
+      console.error('[Settings] Failed to clear settings from database:', error);
+    }
+  }
+
+  // Clear localStorage
+  try {
+    const keys = Object.keys(localStorage);
+    for (const key of keys) {
+      if (key.startsWith('workany')) {
+        localStorage.removeItem(key);
+      }
+    }
+  } catch (error) {
+    console.error('[Settings] Failed to clear localStorage:', error);
+  }
+
+  // Reset cache
+  settingsCache = null;
 }

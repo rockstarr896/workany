@@ -23,6 +23,13 @@ export default {
   warning: 'Warning',
   info: 'Info',
 
+  // Task actions
+  favorite: 'Add to favorites',
+  unfavorite: 'Remove from favorites',
+  deleteTask: 'Delete task',
+  deleteTaskConfirm: 'Are you sure you want to delete this task?',
+  deleteTaskDescription: 'This action cannot be undone. All messages in this task will be permanently deleted.',
+
   // API error messages
   errors: {
     connectionFailed: 'Connection failed, retrying...',

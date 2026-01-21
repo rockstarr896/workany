@@ -23,6 +23,13 @@ export default {
   warning: '警告',
   info: '提示',
 
+  // 任务操作
+  favorite: '收藏',
+  unfavorite: '取消收藏',
+  deleteTask: '删除任务',
+  deleteTaskConfirm: '确定要删除这个任务吗？',
+  deleteTaskDescription: '此操作无法撤销，任务中的所有消息将被永久删除。',
+
   // API 错误提示
   errors: {
     connectionFailed: '连接服务失败，正在重试...',

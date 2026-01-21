@@ -7,8 +7,9 @@ import {
   useRef,
   useState,
 } from 'react';
-import { useLocation, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
+  deleteTask,
   getAllTasks,
   getFilesByTaskId,
   updateTask,
@@ -78,6 +79,7 @@ function TaskDetailContent() {
   const { t } = useLanguage();
   const { taskId } = useParams();
   const location = useLocation();
+  const navigate = useNavigate();
   const state = location.state as LocationState | null;
   const initialPrompt = state?.prompt || '';
   const initialSessionId = state?.sessionId;
@@ -494,6 +496,32 @@ function TaskDetailContent() {
     loadAllTasks();
   }, [task]);
 
+  // Handle task deletion from sidebar
+  const handleDeleteTask = async (id: string) => {
+    try {
+      await deleteTask(id);
+      setAllTasks((prev) => prev.filter((t) => t.id !== id));
+      // If deleting current task, navigate to home
+      if (id === taskId) {
+        navigate('/');
+      }
+    } catch (error) {
+      console.error('Failed to delete task:', error);
+    }
+  };
+
+  // Handle favorite toggle from sidebar
+  const handleToggleFavorite = async (id: string, favorite: boolean) => {
+    try {
+      await updateTask(id, { favorite });
+      setAllTasks((prev) =>
+        prev.map((t) => (t.id === id ? { ...t, favorite } : t))
+      );
+    } catch (error) {
+      console.error('Failed to update task:', error);
+    }
+  };
+
   // Reset state when taskId changes
   useEffect(() => {
     if (prevTaskIdRef.current !== taskId) {
@@ -611,7 +639,12 @@ function TaskDetailContent() {
     <ToolSelectionContext.Provider value={toolSelectionValue}>
       <div className="bg-sidebar flex h-screen overflow-hidden">
         {/* Left Sidebar */}
-        <LeftSidebar tasks={allTasks} currentTaskId={taskId} />
+        <LeftSidebar
+          tasks={allTasks}
+          currentTaskId={taskId}
+          onDeleteTask={handleDeleteTask}
+          onToggleFavorite={handleToggleFavorite}
+        />
 
         {/* Main Content Area with Responsive Layout */}
         <div

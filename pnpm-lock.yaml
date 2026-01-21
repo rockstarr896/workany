@@ -174,9 +174,6 @@ importers:
       '@anthropic-ai/sandbox-runtime':
         specifier: ^0.0.28
         version: 0.0.28
-      '@boxlite-ai/boxlite':
-        specifier: ^0.1.6
-        version: 0.1.6
       '@hono/node-server':
         specifier: ^1.14.1
         version: 1.19.9(hono@4.11.4)
@@ -341,22 +338,6 @@ packages:
   '@babel/types@7.28.6':
     resolution: {integrity: sha512-0ZrskXVEHSWIqZM/sQZ4EV3jZJXRkio/WCxaqKZP1g//CEWEPSfeZFcms4XeKBCHU0ZKnIkdJeU/kF+eRp5lBg==}
     engines: {node: '>=6.9.0'}
-
-  '@boxlite-ai/boxlite-darwin-arm64@0.1.6':
-    resolution: {integrity: sha512-0PWzWA4jnIZkJLxF1VggxfiQ83CUoCdldqjQYPDcRNuqIaTrOU44Muy8yBEUiI7aH6LYo0Cvbfx9kbxB8jHmwQ==}
-    engines: {node: '>=18.0.0'}
-    cpu: [arm64]
-    os: [darwin]
-
-  '@boxlite-ai/boxlite-linux-x64-gnu@0.1.6':
-    resolution: {integrity: sha512-eQypxliXQY2kMJFYcd0tp2sEII8gs2eeBPFHKd6v20KgBsYclb/JziYqvvtBuUSe8nHC7LxY2NQQ67jIHh8JDA==}
-    engines: {node: '>=18.0.0'}
-    cpu: [x64]
-    os: [linux]
-
-  '@boxlite-ai/boxlite@0.1.6':
-    resolution: {integrity: sha512-Q/mmI0dx+u6e1dX6iiA8wtu1eg13JvafTjxOS7bnU9t28gmW0i9KVc2WMHBim6X7/cJ0SqFtwOmnioIkmsuvFg==}
-    engines: {node: '>=18.0.0'}
 
   '@esbuild/aix-ppc64@0.24.2':
     resolution: {integrity: sha512-thpVCb/rhxE/BnMLQ7GReQLLN8q9qbHmI55F4489/ByVg2aQaQ6kbcLb6FHkocZzQhxc4gx0sCk0tJkKBFzDhA==}
@@ -869,12 +850,6 @@ packages:
     peerDependenciesMeta:
       '@cfworker/json-schema':
         optional: true
-
-  '@napi-rs/triples@1.2.0':
-    resolution: {integrity: sha512-HAPjR3bnCsdXBsATpDIP5WCrw0JcACwhhrwIAQhiR46n+jm+a2F8kBsfseAuWtSyQ+H3Yebt2k43B5dy+04yMA==}
-
-  '@node-rs/helper@1.6.0':
-    resolution: {integrity: sha512-2OTh/tokcLA1qom1zuCJm2gQzaZljCCbtX1YCrwRVd/toz7KxaDRFeLTAPwhs8m9hWgzrBn5rShRm6IaZofCPw==}
 
   '@pkgr/core@0.2.9':
     resolution: {integrity: sha512-QNqXyfVS2wm9hweSYD2O7F0G06uurj9kZ96TRQE5Y9hU7+tgdZwIkbAKc5Ocy1HxEY2kuDQa6cQ1WRs/O5LFKA==}
@@ -4056,19 +4031,6 @@ snapshots:
       '@babel/helper-string-parser': 7.27.1
       '@babel/helper-validator-identifier': 7.28.5
 
-  '@boxlite-ai/boxlite-darwin-arm64@0.1.6':
-    optional: true
-
-  '@boxlite-ai/boxlite-linux-x64-gnu@0.1.6':
-    optional: true
-
-  '@boxlite-ai/boxlite@0.1.6':
-    dependencies:
-      '@node-rs/helper': 1.6.0
-    optionalDependencies:
-      '@boxlite-ai/boxlite-darwin-arm64': 0.1.6
-      '@boxlite-ai/boxlite-linux-x64-gnu': 0.1.6
-
   '@esbuild/aix-ppc64@0.24.2':
     optional: true
 
@@ -4414,12 +4376,6 @@ snapshots:
     transitivePeerDependencies:
       - hono
       - supports-color
-
-  '@napi-rs/triples@1.2.0': {}
-
-  '@node-rs/helper@1.6.0':
-    dependencies:
-      '@napi-rs/triples': 1.2.0
 
   '@pkgr/core@0.2.9': {}
 

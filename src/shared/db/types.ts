@@ -19,6 +19,7 @@ export interface Task {
   status: TaskStatus;
   cost: number | null;
   duration: number | null;
+  favorite?: boolean; // Whether task is favorited
   created_at: string;
   updated_at: string;
 }
@@ -78,6 +79,7 @@ export interface UpdateTaskInput {
   cost?: number;
   duration?: number;
   prompt?: string;
+  favorite?: boolean;
 }
 
 // Library file types

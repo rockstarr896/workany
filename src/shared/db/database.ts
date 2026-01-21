@@ -260,7 +260,11 @@ export async function getTasksBySessionId(sessionId: string): Promise<Task[]> {
         'SELECT * FROM tasks WHERE session_id = $1 ORDER BY task_index ASC',
         [sessionId]
       );
-      return tasks;
+      // Convert favorite from 0/1 to boolean for all tasks
+      return tasks.map((task) => ({
+        ...task,
+        favorite: task.favorite !== undefined ? Boolean(task.favorite) : false,
+      }));
     } catch {
       // session_id column may not exist in older DBs
       return [];
@@ -341,7 +345,12 @@ export async function getTask(id: string): Promise<Task | null> {
       'SELECT * FROM tasks WHERE id = $1',
       [id]
     );
-    return result[0] || null;
+    const task = result[0] || null;
+    // Convert favorite from 0/1 to boolean
+    if (task && task.favorite !== undefined) {
+      task.favorite = Boolean(task.favorite);
+    }
+    return task;
   } else {
     const db = await getIndexedDB();
     const tx = db.transaction('tasks', 'readonly');
@@ -358,7 +367,11 @@ export async function getAllTasks(): Promise<Task[]> {
     const tasks = await database.select<Task[]>(
       'SELECT * FROM tasks ORDER BY created_at DESC'
     );
-    return tasks;
+    // Convert favorite from 0/1 to boolean for all tasks
+    return tasks.map((task) => ({
+      ...task,
+      favorite: task.favorite !== undefined ? Boolean(task.favorite) : false,
+    }));
   } else {
     const db = await getIndexedDB();
     const tx = db.transaction('tasks', 'readonly');
@@ -399,14 +412,36 @@ export async function updateTask(
       updates.push(`prompt = $${paramIndex++}`);
       values.push(input.prompt);
     }
+    if (input.favorite !== undefined) {
+      updates.push(`favorite = $${paramIndex++}`);
+      values.push(input.favorite ? 1 : 0);
+    }
 
     if (updates.length > 0) {
       updates.push(`updated_at = datetime('now')`);
       values.push(id);
-      await database.execute(
-        `UPDATE tasks SET ${updates.join(', ')} WHERE id = $${paramIndex}`,
-        values
-      );
+      try {
+        await database.execute(
+          `UPDATE tasks SET ${updates.join(', ')} WHERE id = $${paramIndex}`,
+          values
+        );
+      } catch (error) {
+        // If favorite column doesn't exist, add it and retry
+        if (
+          input.favorite !== undefined &&
+          String(error).includes('favorite')
+        ) {
+          await database.execute(
+            'ALTER TABLE tasks ADD COLUMN favorite INTEGER DEFAULT 0'
+          );
+          await database.execute(
+            `UPDATE tasks SET ${updates.join(', ')} WHERE id = $${paramIndex}`,
+            values
+          );
+        } else {
+          throw error;
+        }
+      }
     }
 
     return getTask(id);

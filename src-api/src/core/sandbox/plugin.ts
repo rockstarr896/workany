@@ -200,35 +200,6 @@ export abstract class BaseSandboxProvider implements ISandboxProvider {
 // ============================================================================
 
 /**
- * JSON Schema for BoxLite provider configuration
- */
-export const BOXLITE_CONFIG_SCHEMA = {
-  type: 'object',
-  properties: {
-    memoryMib: {
-      type: 'number',
-      default: 1024,
-      description: 'Memory limit in MiB',
-    },
-    cpus: {
-      type: 'number',
-      default: 2,
-      description: 'Number of CPU cores',
-    },
-    workDir: {
-      type: 'string',
-      default: '/workspace',
-      description: 'Default working directory',
-    },
-    autoRemove: {
-      type: 'boolean',
-      default: true,
-      description: 'Auto-remove containers after execution',
-    },
-  },
-};
-
-/**
  * JSON Schema for Docker provider configuration
  */
 export const DOCKER_CONFIG_SCHEMA = {
@@ -307,25 +278,6 @@ export const E2B_CONFIG_SCHEMA = {
 // ============================================================================
 // Built-in Plugin Metadata
 // ============================================================================
-
-/**
- * Metadata for built-in BoxLite provider
- */
-export const BOXLITE_METADATA: SandboxProviderMetadata = {
-  type: 'boxlite',
-  name: 'BoxLite VM',
-  version: '1.0.0',
-  description:
-    'Micro-VM based sandbox using BoxLite. Provides strong isolation on macOS Apple Silicon and Linux with KVM.',
-  configSchema: BOXLITE_CONFIG_SCHEMA,
-  builtin: true,
-  isolation: 'vm',
-  supportedRuntimes: ['node', 'python', 'bun'],
-  supportsVolumeMounts: true,
-  supportsNetworking: true,
-  supportsPooling: true,
-  tags: ['vm', 'isolation', 'security'],
-};
 
 /**
  * Metadata for built-in Native provider

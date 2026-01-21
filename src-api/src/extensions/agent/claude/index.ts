@@ -659,8 +659,9 @@ const ALLOWED_TOOLS = [
 
 /**
  * Create sandbox MCP server with inline tools
+ * @param sandboxProvider - The sandbox provider to use (e.g., 'codex', 'claude', 'native')
  */
-function createSandboxMcpServer() {
+function createSandboxMcpServer(sandboxProvider?: string) {
   return createSdkMcpServer({
     name: 'sandbox',
     version: '1.0.0',
@@ -707,7 +708,7 @@ Example workflow:
               {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(args),
+                body: JSON.stringify({ ...args, provider: sandboxProvider }),
               }
             );
 
@@ -818,6 +819,7 @@ IMPORTANT: The sandbox is isolated and CANNOT write files to the host filesystem
                 cwd: args.workDir,
                 image: args.image,
                 timeout: args.timeout,
+                provider: sandboxProvider,
               }),
             });
 
@@ -1110,7 +1112,7 @@ User's request (answer this AFTER reading the images):
 
     // Add sandbox MCP server if sandbox is enabled
     if (options?.sandbox?.enabled) {
-      mcpServers.sandbox = createSandboxMcpServer();
+      mcpServers.sandbox = createSandboxMcpServer(options.sandbox.provider);
       // Add sandbox tools to allowed tools
       queryOptions.allowedTools = [
         ...(options?.allowedTools || ALLOWED_TOOLS),
@@ -1421,7 +1423,7 @@ If you need to create any files during planning, use this directory.
 
     // Add sandbox MCP server if sandbox is enabled
     if (options.sandbox?.enabled) {
-      mcpServers.sandbox = createSandboxMcpServer();
+      mcpServers.sandbox = createSandboxMcpServer(options.sandbox.provider);
       // Add sandbox tools to allowed tools
       queryOptions.allowedTools = [
         ...(options.allowedTools || ALLOWED_TOOLS),

@@ -43,9 +43,9 @@ export default {
   envLocal: '本机',
   envLocalDescription: '在本机运行',
   envCodexSandbox: 'Codex 沙盒',
-  envCodexSandboxDescription: '在 OpenAI 沙盒中运行',
+  envCodexSandboxDescription: '在沙盒环境中执行代码',
   envClaudeSandbox: 'Claude 沙盒',
-  envClaudeSandboxDescription: '在 Anthropic 沙盒中运行',
+  envClaudeSandboxDescription: '在沙盒环境中执行代码',
   installNode: 'Node.js 未安装',
   installNodeHint: '访问: https://nodejs.org',
   installPython: 'Python 未安装',
@@ -60,11 +60,19 @@ export default {
     '所有会话输出和文件将保存在此目录中。每个对话会在 sessions/ 下创建一个子文件夹。',
   directoryStructure: '结构: {path}/sessions/[task-id]/',
 
-  // Sandbox (legacy)
+  // Sandbox
   sandbox: '沙盒模式',
   sandboxDescription: '在隔离容器中运行脚本，提供更好的安全性和依赖管理',
   sandboxAutoDetect:
     '容器运行时将根据脚本类型自动选择（Node.js、Python、Bun 等）',
+  defaultSandbox: '默认沙盒',
+  defaultSandboxDescription: '选择脚本执行时使用的沙盒环境',
+  sandboxNative: '本机执行',
+  sandboxNativeDescription: '直接在主机运行，无隔离',
+  sandboxCodex: 'Codex 沙盒',
+  sandboxCodexDescription: '在沙盒环境中执行代码',
+  sandboxClaude: 'Claude 沙盒',
+  sandboxClaudeDescription: '在沙盒环境中执行代码',
 
   // Model / Provider
   modelSettings: '模型设置',
@@ -149,6 +157,30 @@ export default {
   mcpConfig: 'MCP 配置',
   mcpConfigDescription: 'MCP 服务器配置文件路径 (JSON 格式)',
   mcpConfigExample: 'mcp.json 格式示例:',
+
+  // Data
+  data: '数据',
+  dataDescription: '管理您的数据：导出备份、导入数据或清空所有数据。',
+  dataExport: '导出数据',
+  dataExportDescription: '将所有任务、消息和设置导出为 JSON 文件。',
+  dataExportButton: '导出',
+  dataExporting: '导出中...',
+  dataImport: '导入数据',
+  dataImportDescription: '从之前导出的 JSON 文件导入数据。',
+  dataImportButton: '导入',
+  dataImporting: '导入中...',
+  dataClear: '清空数据',
+  dataClearDescription: '永久删除所有数据。此操作无法撤销。',
+  dataClearButton: '清空',
+  dataClearing: '清空中...',
+  dataSuccess: '成功',
+  dataClearConfirmTitle: '清空数据',
+  dataClearConfirmDescription: '选择您要清空的数据：',
+  dataClearTasksOnly: '仅清空任务',
+  dataClearTasksOnlyDescription: '删除所有任务和消息，保留设置',
+  dataClearAll: '清空所有数据',
+  dataClearAllDescription: '删除所有任务、消息和设置',
+  dataCancel: '取消',
 
   // About
   aiPlatform: '桌面通用 Agent',

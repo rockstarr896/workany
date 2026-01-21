@@ -13,7 +13,7 @@ import type {
  * Sandbox Module
  *
  * Provides extensible sandbox functionality for isolated code execution.
- * Supports multiple providers: BoxLite (VM), Native (no isolation), Docker, E2B.
+ * Supports multiple providers: Codex, Claude, Native (no isolation).
  */
 
 // Export types
@@ -49,10 +49,12 @@ export {
   NativeProvider,
   createNativeProvider,
   nativePlugin,
-  BoxLiteProvider,
-  createBoxLiteProvider,
-  isBoxLiteAvailable,
-  boxlitePlugin,
+  CodexProvider,
+  createCodexProvider,
+  codexPlugin,
+  ClaudeProvider,
+  createClaudeProvider,
+  claudePlugin,
   builtinPlugins,
   registerBuiltinProviders,
   registerSandboxPlugin,
@@ -93,7 +95,7 @@ export interface ProviderSelectionResult {
 
 /**
  * Get the best available sandbox provider
- * Priority: BoxLite (VM isolation) → Native (local) → Error with install instructions
+ * Priority: Codex → Native (local)
  */
 export async function getBestProvider(): Promise<ISandboxProvider> {
   const result = await getBestProviderWithInfo();
@@ -101,89 +103,37 @@ export async function getBestProvider(): Promise<ISandboxProvider> {
 }
 
 /**
- * Check if running in development mode
- * Development mode: tsx, ts-node, or NODE_ENV=development
- */
-function isDevMode(): boolean {
-  // Check NODE_ENV
-  if (process.env.NODE_ENV === 'development') {
-    return true;
-  }
-
-  // Check if running with tsx or ts-node (development)
-  const execArgv = process.execArgv.join(' ');
-  if (execArgv.includes('tsx') || execArgv.includes('ts-node')) {
-    return true;
-  }
-
-  // Check process title
-  if (process.title.includes('tsx') || process.title.includes('ts-node')) {
-    return true;
-  }
-
-  // Check if running from source (not compiled binary)
-  const mainScript = process.argv[1] || '';
-  if (mainScript.endsWith('.ts') || mainScript.includes('tsx')) {
-    return true;
-  }
-
-  return false;
-}
-
-/**
  * Get the best available sandbox provider with fallback information
- * Priority:
- * - Development mode: Native (for faster iteration without entitlements)
- * - Production mode: BoxLite (VM isolation) → Native (fallback)
+ * Priority: Codex → Native (local)
  */
 export async function getBestProviderWithInfo(): Promise<ProviderSelectionResult> {
   await initSandbox();
 
   const registry = getSandboxRegistry();
-  const devMode = isDevMode();
 
-  // In development mode, use Native provider directly (no entitlements required)
-  if (devMode) {
-    console.log('[Sandbox] 🔧 Development mode detected, using Native provider (no VM isolation)');
-    console.log('[Sandbox] 💡 Use signed binary or packaged app for BoxLite VM isolation');
-
-    try {
-      const nativeProvider = await registry.getInstance('native');
-      return {
-        provider: nativeProvider,
-        usedFallback: true,
-        fallbackReason: '开发模式下使用本机执行环境。打包后的应用将使用 BoxLite VM 隔离。',
-      };
-    } catch (error) {
-      console.error('[Sandbox] Native provider failed:', error);
-      throw new Error('开发模式下无法初始化本机执行环境。');
-    }
-  }
-
-  // Production mode: try BoxLite first
-  // 1. First try BoxLite (preferred - VM isolation)
+  // 1. First try Codex (preferred)
   try {
-    const boxliteProvider = registry.create('boxlite');
-    console.log('[Sandbox] Checking BoxLite availability...');
-    const isBoxliteAvailable = await boxliteProvider.isAvailable();
+    const codexProvider = registry.create('codex');
+    console.log('[Sandbox] Checking Codex availability...');
+    const isCodexAvailable = await codexProvider.isAvailable();
 
-    if (isBoxliteAvailable) {
-      console.log('[Sandbox] ✅ Using BoxLite VM sandbox (hardware isolation)');
-      await boxliteProvider.init();
+    if (isCodexAvailable) {
+      console.log('[Sandbox] ✅ Using Codex sandbox');
+      await codexProvider.init();
       return {
-        provider: boxliteProvider,
+        provider: codexProvider,
         usedFallback: false,
       };
     } else {
-      console.log('[Sandbox] BoxLite runtime verification failed, will use fallback');
+      console.log('[Sandbox] Codex not available, will use fallback');
     }
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    console.warn('[Sandbox] BoxLite not available:', errorMsg);
+    console.warn('[Sandbox] Codex not available:', errorMsg);
   }
 
   // 2. Fallback to Native (local execution)
-  console.log('[Sandbox] ⚠️ BoxLite not available, falling back to Native (local) execution');
+  console.log('[Sandbox] ⚠️ Codex not available, falling back to Native (local) execution');
 
   try {
     const nativeProvider = await registry.getInstance('native');
@@ -191,12 +141,12 @@ export async function getBestProviderWithInfo(): Promise<ProviderSelectionResult
     return {
       provider: nativeProvider,
       usedFallback: true,
-      fallbackReason: 'BoxLite VM 不可用，使用本机执行环境。如需 VM 隔离，请确保 BoxLite 已正确安装。',
+      fallbackReason: 'Codex 沙盒不可用，使用本机执行环境。',
     };
   } catch (error) {
     console.error('[Sandbox] Native provider also failed:', error);
     throw new Error(
-      '无法初始化沙箱环境。BoxLite VM 和本机执行环境都不可用。\n' +
+      '无法初始化沙箱环境。Codex 和本机执行环境都不可用。\n' +
       '请检查系统环境或联系技术支持。'
     );
   }
@@ -237,8 +187,10 @@ export async function runScriptInSandbox(
   const caps = provider.getCapabilities();
 
   // Log which provider was used
-  const providerLabel = provider.type === 'boxlite'
-    ? '🔒 BoxLite VM (硬件隔离)'
+  const providerLabel = provider.type === 'codex'
+    ? '🔒 Codex Sandbox (进程隔离)'
+    : provider.type === 'claude'
+    ? '🔒 Claude Sandbox (容器隔离)'
     : '⚠️ Native (本机执行)';
   console.log(`[Sandbox] Script executed via: ${providerLabel}`);
 

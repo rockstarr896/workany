@@ -32,6 +32,33 @@ async function ensureInitialized() {
 }
 
 /**
+ * Get sandbox provider with fallback to native if preferred provider fails
+ */
+async function getProviderWithFallback(
+  preferredProvider?: SandboxProviderType
+): Promise<{ provider: Awaited<ReturnType<typeof getSandboxProvider>>; usedFallback: boolean }> {
+  if (!preferredProvider) {
+    return { provider: await getBestProvider(), usedFallback: false };
+  }
+
+  try {
+    const provider = await getSandboxProvider(preferredProvider);
+    // Check if provider is available
+    const isAvailable = await provider.isAvailable();
+    if (isAvailable) {
+      return { provider, usedFallback: false };
+    }
+    console.log(`[Sandbox] Provider ${preferredProvider} not available, falling back to native`);
+  } catch (error) {
+    console.log(`[Sandbox] Failed to get provider ${preferredProvider}:`, error);
+  }
+
+  // Fallback to native
+  const nativeProvider = await getSandboxProvider('native');
+  return { provider: nativeProvider, usedFallback: true };
+}
+
+/**
  * Check if sandbox is available on this platform
  * Returns detailed info about which provider is being used
  */
@@ -97,10 +124,11 @@ sandbox.post('/exec', async (c) => {
       return c.json({ error: 'Command is required' }, 400);
     }
 
-    // Get the appropriate provider
-    const sandboxProvider = preferredProvider
-      ? await getSandboxProvider(preferredProvider)
-      : await getBestProvider();
+    // Get the appropriate provider with fallback
+    const { provider: sandboxProvider, usedFallback } = await getProviderWithFallback(preferredProvider);
+    if (usedFallback) {
+      console.log(`[Sandbox] Using native fallback for exec`);
+    }
 
     const execOptions: SandboxExecOptions = {
       command,
@@ -228,12 +256,13 @@ sandbox.post('/run/file', async (c) => {
       effectiveProvider = 'native';
     }
 
-    // Get the appropriate provider
+    // Get the appropriate provider with fallback
     // Note: Sandbox cannot write files to host - scripts should output to stdout
     // and agent will use Write tool to save results
-    const sandboxProvider = effectiveProvider
-      ? await getSandboxProvider(effectiveProvider)
-      : await getBestProvider();
+    const { provider: sandboxProvider, usedFallback } = await getProviderWithFallback(effectiveProvider);
+    if (usedFallback) {
+      console.log(`[Sandbox] Using native fallback for run/file`);
+    }
 
     // Set up volume mounts if the provider supports it
     if (sandboxProvider.setVolumes) {
@@ -329,10 +358,8 @@ sandbox.post('/run/node', async (c) => {
       return c.json({ error: 'Script content is required' }, 400);
     }
 
-    // Get the appropriate provider
-    const sandboxProvider = preferredProvider
-      ? await getSandboxProvider(preferredProvider)
-      : await getBestProvider();
+    // Get the appropriate provider with fallback
+    const { provider: sandboxProvider } = await getProviderWithFallback(preferredProvider);
 
     // Write script to a temp file first
     const workDir = cwd || '/tmp';
@@ -417,9 +444,7 @@ sandbox.post('/exec/stream', async (c) => {
 
   return streamSSE(c, async (stream) => {
     try {
-      const sandboxProvider = preferredProvider
-        ? await getSandboxProvider(preferredProvider)
-        : await getBestProvider();
+      const { provider: sandboxProvider } = await getProviderWithFallback(preferredProvider);
 
       const caps = sandboxProvider.getCapabilities();
       const isolationLabel = caps.isolation === 'vm'

@@ -1,7 +1,24 @@
-import { FolderOpen } from 'lucide-react';
+import { FolderOpen, Shield, ShieldOff } from 'lucide-react';
 import { getAppDataDir } from '@/shared/lib/paths';
 import { useLanguage } from '@/shared/providers/language-provider';
+import { cn } from '@/shared/lib/utils';
 import type { WorkplaceSettingsProps } from '../types';
+
+// Sandbox options (only codex and native, others hidden)
+const sandboxOptions = [
+  {
+    id: 'codex',
+    icon: Shield,
+    nameKey: 'sandboxCodex',
+    descKey: 'sandboxCodexDescription',
+  },
+  {
+    id: 'native',
+    icon: ShieldOff,
+    nameKey: 'sandboxNative',
+    descKey: 'sandboxNativeDescription',
+  },
+] as const;
 
 export function WorkplaceSettings({
   settings,
@@ -16,6 +33,60 @@ export function WorkplaceSettings({
         <p className="text-muted-foreground text-sm">
           {t.settings.workplaceDescription}
         </p>
+      </div>
+
+      {/* Default Sandbox */}
+      <div className="flex flex-col gap-2">
+        <label className="text-foreground block text-sm font-medium">
+          {t.settings.defaultSandbox}
+        </label>
+        <p className="text-muted-foreground text-xs">
+          {t.settings.defaultSandboxDescription}
+        </p>
+        <div className="grid grid-cols-2 gap-2 max-w-md">
+          {sandboxOptions.map((option) => {
+            const Icon = option.icon;
+            const isSelected = settings.defaultSandboxProvider === option.id;
+            return (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() =>
+                  onSettingsChange({
+                    ...settings,
+                    defaultSandboxProvider: option.id,
+                  })
+                }
+                className={cn(
+                  'flex items-center gap-3 rounded-lg border p-3 text-left transition-colors',
+                  isSelected
+                    ? 'border-primary bg-primary/5'
+                    : 'border-border hover:bg-accent'
+                )}
+              >
+                <Icon
+                  className={cn(
+                    'size-5 shrink-0',
+                    isSelected ? 'text-primary' : 'text-muted-foreground'
+                  )}
+                />
+                <div className="min-w-0">
+                  <div
+                    className={cn(
+                      'text-sm font-medium',
+                      isSelected ? 'text-primary' : 'text-foreground'
+                    )}
+                  >
+                    {t.settings[option.nameKey as keyof typeof t.settings]}
+                  </div>
+                  <div className="text-muted-foreground truncate text-xs">
+                    {t.settings[option.descKey as keyof typeof t.settings]}
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Working Directory */}

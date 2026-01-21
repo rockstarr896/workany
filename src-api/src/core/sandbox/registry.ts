@@ -292,10 +292,10 @@ class SandboxRegistry implements SandboxProviderRegistry {
 
   /**
    * Get the best available provider by priority
-   * Priority: boxlite > docker > native
+   * Priority: codex > claude > docker > native
    */
   async getBestAvailable(): Promise<string | undefined> {
-    const priority = ['boxlite', 'docker', 'native'];
+    const priority = ['codex', 'claude', 'docker', 'native'];
     const available = await this.getAvailable();
 
     for (const type of priority) {
