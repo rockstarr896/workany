@@ -13,7 +13,7 @@ export default {
   workingFolder: '工作文件夹',
   sessionFolder: '会话文件夹',
   outputFolder: '输出文件',
-  editedFolders: '操作文件',
+  editedFolders: '引用文件',
   outputsDesc: '任务输出文件保存在此处',
   sessionDesc: '会话文件和附件',
   noFiles: '暂无文件',

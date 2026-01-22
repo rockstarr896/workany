@@ -788,23 +788,21 @@ recreate_dmg() {
             # Notarize the DMG
             log_info "Notarizing DMG (this may take a few minutes)..."
             local notarize_output
-            notarize_output=$(xcrun notarytool submit "$dmg_dir/$dmg_name" \
-                --keychain-profile "notarytool-profile" \
-                --wait 2>&1) || {
-                # Try with explicit credentials if keychain profile fails
-                if [ -n "$APPLE_ID" ] && [ -n "$APPLE_PASSWORD" ] && [ -n "$APPLE_TEAM_ID" ]; then
-                    log_info "Trying notarization with explicit credentials..."
-                    notarize_output=$(xcrun notarytool submit "$dmg_dir/$dmg_name" \
-                        --apple-id "$APPLE_ID" \
-                        --password "$APPLE_PASSWORD" \
-                        --team-id "$APPLE_TEAM_ID" \
-                        --wait 2>&1)
-                else
-                    log_warn "DMG notarization failed. You may need to notarize manually."
-                    echo "$notarize_output"
+            if [ -n "$APPLE_ID" ] && [ -n "$APPLE_PASSWORD" ] && [ -n "$APPLE_TEAM_ID" ]; then
+                notarize_output=$(xcrun notarytool submit "$dmg_dir/$dmg_name" \
+                    --apple-id "$APPLE_ID" \
+                    --password "$APPLE_PASSWORD" \
+                    --team-id "$APPLE_TEAM_ID" \
+                    --wait 2>&1) || true
+            else
+                # Try keychain profile as fallback
+                notarize_output=$(xcrun notarytool submit "$dmg_dir/$dmg_name" \
+                    --keychain-profile "notarytool-profile" \
+                    --wait 2>&1) || {
+                    log_warn "DMG notarization failed. Set APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID environment variables."
                     return 0
-                fi
-            }
+                }
+            fi
 
             if echo "$notarize_output" | grep -q "status: Accepted"; then
                 log_info "DMG notarization successful"

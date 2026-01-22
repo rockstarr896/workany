@@ -894,33 +894,32 @@ export class ClaudeAgent extends BaseAgent {
     // Extend PATH for packaged app to find node and other binaries
     env.PATH = getExtendedPath();
 
-    // Override with config values if provided
-    // Use ANTHROPIC_AUTH_TOKEN for API key (works with OpenRouter)
+    // When user configures custom API in settings, we need to ensure it takes priority
+    // over any config from ~/.claude/settings.json (which is read via settingSources: ['user'])
+    // Delete env vars to prevent them from being overridden by ~/.claude/settings.json
     if (this.config.apiKey) {
+      // Use ANTHROPIC_AUTH_TOKEN for custom API key
       env.ANTHROPIC_AUTH_TOKEN = this.config.apiKey;
-      // When using custom API (like OpenRouter), completely remove ANTHROPIC_API_KEY
-      // Empty string is different from undefined - must delete it entirely
+      // Delete ANTHROPIC_API_KEY to ensure AUTH_TOKEN takes priority
+      delete env.ANTHROPIC_API_KEY;
+
+      // Handle base URL: set if configured, delete if not (to use default Anthropic API)
       if (this.config.baseUrl) {
-        delete env.ANTHROPIC_API_KEY;
+        env.ANTHROPIC_BASE_URL = this.config.baseUrl;
+        logger.info('[ClaudeAgent] Using custom API from settings:', {
+          baseUrl: this.config.baseUrl,
+        });
+      } else {
+        // Delete to ensure default Anthropic API is used, not from ~/.claude/settings.json
+        delete env.ANTHROPIC_BASE_URL;
+        logger.info('[ClaudeAgent] Using custom API key with default Anthropic base URL');
       }
-      logger.info('[ClaudeAgent] Using custom API key from config');
     } else {
       logger.info(
-        '[ClaudeAgent] Using API key from environment:',
+        '[ClaudeAgent] Using API config from environment:',
         env.ANTHROPIC_AUTH_TOKEN || env.ANTHROPIC_API_KEY
-          ? 'present'
-          : 'missing'
-      );
-    }
-
-    // Set base URL for custom API endpoints (like OpenRouter)
-    if (this.config.baseUrl) {
-      env.ANTHROPIC_BASE_URL = this.config.baseUrl;
-      console.log('[ClaudeAgent] Using custom base URL:', this.config.baseUrl);
-    } else {
-      console.log(
-        '[ClaudeAgent] Using base URL from environment:',
-        env.ANTHROPIC_BASE_URL || 'default'
+          ? 'key present'
+          : 'key missing'
       );
     }
 
@@ -931,9 +930,9 @@ export class ClaudeAgent extends BaseAgent {
       env.ANTHROPIC_DEFAULT_SONNET_MODEL = this.config.model;
       env.ANTHROPIC_DEFAULT_HAIKU_MODEL = this.config.model;
       env.ANTHROPIC_DEFAULT_OPUS_MODEL = this.config.model;
-      console.log('[ClaudeAgent] Model configured:', this.config.model);
+      logger.info('[ClaudeAgent] Model configured:', this.config.model);
     } else {
-      console.log(
+      logger.info(
         '[ClaudeAgent] Model to use:',
         env.ANTHROPIC_MODEL || 'default from SDK'
       );
@@ -941,16 +940,19 @@ export class ClaudeAgent extends BaseAgent {
 
     // Debug: Log final environment variables for API configuration
     logger.info('[ClaudeAgent] Final env config:', {
-      ANTHROPIC_AUTH_TOKEN: env.ANTHROPIC_AUTH_TOKEN
-        ? `${env.ANTHROPIC_AUTH_TOKEN.slice(0, 10)}...`
-        : 'not set',
       ANTHROPIC_API_KEY:
         env.ANTHROPIC_API_KEY === undefined
           ? '(deleted)'
-          : env.ANTHROPIC_API_KEY === ''
-            ? '(empty)'
-            : `${env.ANTHROPIC_API_KEY.slice(0, 10)}...`,
-      ANTHROPIC_BASE_URL: env.ANTHROPIC_BASE_URL || 'not set',
+          : env.ANTHROPIC_API_KEY
+            ? `${env.ANTHROPIC_API_KEY.slice(0, 10)}...`
+            : 'not set',
+      ANTHROPIC_AUTH_TOKEN: env.ANTHROPIC_AUTH_TOKEN
+        ? `${env.ANTHROPIC_AUTH_TOKEN.slice(0, 10)}...`
+        : 'not set',
+      ANTHROPIC_BASE_URL:
+        env.ANTHROPIC_BASE_URL === undefined
+          ? '(deleted - use default)'
+          : env.ANTHROPIC_BASE_URL || 'not set',
       ANTHROPIC_MODEL: env.ANTHROPIC_MODEL || 'not set',
     });
 
@@ -1122,13 +1124,10 @@ User's request (answer this AFTER reading the images):
     const userMcpServers = await loadMcpServers();
 
     // Build query options
-    // When using custom API (like OpenRouter), do NOT include 'user' in settingSources
-    // Because ~/.claude/settings.json API config will override our env config
-    // MCP servers are loaded separately via loadMcpServers() which reads both directories
-    // Skills are loaded by Claude Code internally regardless of settingSources
-    const settingSources: ('user' | 'project')[] = this.config.baseUrl
-      ? ['project'] // Custom API: skip user settings to avoid API config override
-      : ['user', 'project']; // Default API: use both for full compatibility
+    // Always use ['user', 'project'] to load skills and MCP from user's ~/.claude directory
+    // User's custom API settings from WorkAny settings page are passed via env config
+    // which takes priority over ~/.claude/settings.json because we set ANTHROPIC_API_KEY directly
+    const settingSources: ('user' | 'project')[] = ['user', 'project'];
 
     const queryOptions: Options = {
       cwd: sessionCwd,
@@ -1306,10 +1305,8 @@ If you need to create any files during planning, use this directory.
       return;
     }
 
-    // When using custom API, skip user settings to avoid API config override
-    const planSettingSources: ('user' | 'project')[] = this.config.baseUrl
-      ? ['project']
-      : ['user', 'project'];
+    // Always use ['user', 'project'] to load skills and MCP from user's ~/.claude directory
+    const planSettingSources: ('user' | 'project')[] = ['user', 'project'];
 
     const queryOptions: Options = {
       cwd: sessionCwd, // Set working directory for planning phase
@@ -1463,10 +1460,8 @@ If you need to create any files during planning, use this directory.
     const userMcpServers = await loadMcpServers();
 
     // Build query options
-    // When using custom API, skip user settings to avoid API config override
-    const execSettingSources: ('user' | 'project')[] = this.config.baseUrl
-      ? ['project']
-      : ['user', 'project'];
+    // Always use ['user', 'project'] to load skills and MCP from user's ~/.claude directory
+    const execSettingSources: ('user' | 'project')[] = ['user', 'project'];
 
     const queryOptions: Options = {
       cwd: sessionCwd,

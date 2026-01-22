@@ -13,7 +13,7 @@ export default {
   workingFolder: 'Working Folder',
   sessionFolder: 'Session Folder',
   outputFolder: 'Output',
-  editedFolders: 'Edited',
+  editedFolders: 'Referenced',
   outputsDesc: 'Outputs created during the task land here.',
   sessionDesc: 'Session files and attachments.',
   noFiles: 'No files yet',

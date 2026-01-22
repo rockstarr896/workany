@@ -136,6 +136,20 @@ function getModelConfig():
       providersCount: settings.providers.length,
     });
 
+    // Check if settings appear to be default (not loaded from storage)
+    // This helps diagnose issues where user settings are not being loaded
+    if (
+      settings.defaultProvider === 'default' &&
+      settings.providers.length === 2 &&
+      settings.providers.every((p) => !p.apiKey)
+    ) {
+      console.warn(
+        '[useAgent] WARNING: Settings appear to be defaults. ' +
+          'If you configured a custom API provider, it may not have been loaded correctly. ' +
+          'Check browser console for [Settings] logs to diagnose the issue.'
+      );
+    }
+
     // If using "default" provider, return undefined to use environment variables
     if (settings.defaultProvider === 'default') {
       console.log('[useAgent] Using default provider (environment variables)');

@@ -316,16 +316,26 @@ async function getDatabase() {
 export async function getSettingsAsync(): Promise<Settings> {
   // Return cached settings if available
   if (settingsCache) {
+    console.log('[Settings] getSettingsAsync returning cached settings:', {
+      defaultProvider: settingsCache.defaultProvider,
+      defaultModel: settingsCache.defaultModel,
+    });
     return settingsCache;
   }
 
+  const isTauri = isTauriSync();
+  console.log('[Settings] getSettingsAsync - isTauri:', isTauri);
+
   const database = await getDatabase();
+  console.log('[Settings] getSettingsAsync - database:', database ? 'connected' : 'null');
 
   if (database) {
     try {
       const result = await database.select<{ key: string; value: string }[]>(
         'SELECT key, value FROM settings'
       );
+
+      console.log('[Settings] Database query result rows:', result.length);
 
       if (result.length > 0) {
         // Build settings object from key-value pairs
@@ -344,15 +354,17 @@ export async function getSettingsAsync(): Promise<Settings> {
             settings.providers.push(defaultProvider);
           }
         }
-        // Debug: Log sandbox settings loaded from database
-        console.log(
-          '[Settings] Loaded from database - sandboxEnabled:',
-          settings.sandboxEnabled,
-          'provider:',
-          settings.defaultSandboxProvider
-        );
+        // Debug: Log loaded settings
+        console.log('[Settings] Loaded from database:', {
+          defaultProvider: settings.defaultProvider,
+          defaultModel: settings.defaultModel,
+          sandboxEnabled: settings.sandboxEnabled,
+          sandboxProvider: settings.defaultSandboxProvider,
+        });
         settingsCache = settings;
         return settings;
+      } else {
+        console.log('[Settings] Database has no settings rows, falling back to localStorage');
       }
     } catch (error) {
       console.error('[Settings] Failed to load from database:', error);
@@ -374,26 +386,26 @@ export async function getSettingsAsync(): Promise<Settings> {
           loadedSettings.providers.push(defaultProvider);
         }
       }
-      // Debug: Log sandbox settings loaded from localStorage
-      console.log(
-        '[Settings] Loaded from localStorage - sandboxEnabled:',
-        loadedSettings.sandboxEnabled,
-        'provider:',
-        loadedSettings.defaultSandboxProvider
-      );
+      // Debug: Log loaded settings
+      console.log('[Settings] Loaded from localStorage:', {
+        defaultProvider: loadedSettings.defaultProvider,
+        defaultModel: loadedSettings.defaultModel,
+        sandboxEnabled: loadedSettings.sandboxEnabled,
+        sandboxProvider: loadedSettings.defaultSandboxProvider,
+      });
       settingsCache = loadedSettings;
       return loadedSettings;
+    } else {
+      console.log('[Settings] localStorage has no workany_settings');
     }
   } catch (error) {
     console.error('[Settings] Failed to load from localStorage:', error);
   }
 
-  // Debug: Using default settings
-  console.log(
-    '[Settings] Using defaultSettings - sandboxEnabled:',
-    defaultSettings.sandboxEnabled,
-    'provider:',
-    defaultSettings.defaultSandboxProvider
+  // WARNING: Using default settings - user custom API settings will NOT be applied
+  console.warn(
+    '[Settings] Using defaultSettings - no saved settings found in database or localStorage.',
+    'User custom API settings will NOT be applied!'
   );
   settingsCache = defaultSettings;
   return defaultSettings;
@@ -421,12 +433,25 @@ export function getSettings(): Settings {
         }
       }
       settingsCache = loadedSettings;
+      console.log('[Settings] getSettings loaded from localStorage:', {
+        defaultProvider: loadedSettings.defaultProvider,
+        defaultModel: loadedSettings.defaultModel,
+        providersCount: loadedSettings.providers.length,
+      });
       return loadedSettings;
     }
-  } catch {
-    // Ignore errors
+  } catch (error) {
+    console.error('[Settings] Failed to load from localStorage:', error);
   }
 
+  // WARNING: Returning default settings - user configuration may not be loaded
+  console.warn(
+    '[Settings] getSettings returning defaultSettings - settingsCache is null and localStorage has no data.',
+    'User custom API settings will NOT be applied. This may happen if:',
+    '1. App just started and initializeSettings() has not completed yet',
+    '2. Database/localStorage failed to load settings',
+    '3. User has never saved settings'
+  );
   return defaultSettings;
 }
 
@@ -464,17 +489,28 @@ export async function saveSettingsAsync(settings: Settings): Promise<void> {
 export function saveSettings(settings: Settings): void {
   settingsCache = settings;
 
+  console.log('[Settings] saveSettings called:', {
+    defaultProvider: settings.defaultProvider,
+    defaultModel: settings.defaultModel,
+    providersCount: settings.providers.length,
+  });
+
   // Save to localStorage immediately for sync access
   try {
     localStorage.setItem('workany_settings', JSON.stringify(settings));
+    console.log('[Settings] Saved to localStorage successfully');
   } catch (error) {
     console.error('[Settings] Failed to save to localStorage:', error);
   }
 
   // Also save to database asynchronously
-  saveSettingsAsync(settings).catch((error) => {
-    console.error('[Settings] Failed to save settings async:', error);
-  });
+  saveSettingsAsync(settings)
+    .then(() => {
+      console.log('[Settings] Saved to database successfully');
+    })
+    .catch((error) => {
+      console.error('[Settings] Failed to save settings async:', error);
+    });
 }
 
 // Initialize settings - call this on app startup
