@@ -6,6 +6,14 @@ WorkAny is a desktop AI agent application that executes tasks through natural la
 
 ![](./public/imgs/home.png)
 
+## ❤️ Sponsor
+
+<a href='https://302.ai/?utm_source=workany_github'>
+  <img src="https://github.com/user-attachments/assets/a03edf82-2031-4f23-bdb8-bfc0bfd168a4" width="100%" alt="icon"/>
+</a>
+
+[302.AI](https://302.ai/?utm_source=workany_github) is a pay-as-you-go AI application platform that offers the most comprehensive AI APIs and online applications available.
+
 ## Previews
 
 - Organize files
@@ -36,7 +44,7 @@ WorkAny is a desktop AI agent application that executes tasks through natural la
 
 ![](./public/imgs/sandbox.png)
 
-- Agent Skills
+- Configure Agent Skills
 
 ![](./public/imgs/skills.png)
 

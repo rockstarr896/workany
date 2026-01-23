@@ -83,6 +83,10 @@ build_api_sidecar() {
         x86_64-pc-windows-msvc)
             pnpm run build:binary:windows
             ;;
+        x86_64-pc-windows-gnu)
+            # Cross-compile Windows binary using pkg (same as MSVC, just different output name)
+            pnpm bundle && pnpm exec pkg dist/bundle.cjs --targets node20-win-x64 --output dist/workany-api-x86_64-pc-windows-gnu.exe --options expose-gc
+            ;;
         x86_64-apple-darwin)
             pnpm run build:binary:mac-intel
             ;;
@@ -133,7 +137,7 @@ bundle_cli_tools() {
             node_platform="linux"
             node_arch="x64"
             ;;
-        x86_64-pc-windows-msvc)
+        x86_64-pc-windows-msvc|x86_64-pc-windows-gnu)
             node_platform="win"
             node_arch="x64"
             node_ext=".exe"
@@ -286,7 +290,7 @@ bundle_cli_tools() {
             codex_keep="x86_64-unknown-linux-musl"
             claude_keep="x64-linux"
             ;;
-        x86_64-pc-windows-msvc)
+        x86_64-pc-windows-msvc|x86_64-pc-windows-gnu)
             codex_keep="x86_64-pc-windows-msvc"
             claude_keep="x64-win32"
             ;;
@@ -448,7 +452,7 @@ SHELL_EOF
     # Create target-specific launcher (Tauri adds target triple suffix to externalBin)
     local target_suffix=""
     case "$target" in
-        x86_64-unknown-linux-gnu|x86_64-pc-windows-msvc|x86_64-apple-darwin|aarch64-apple-darwin)
+        x86_64-unknown-linux-gnu|x86_64-pc-windows-msvc|x86_64-pc-windows-gnu|x86_64-apple-darwin|aarch64-apple-darwin)
             target_suffix="-$target"
             ;;
         current)
@@ -476,18 +480,15 @@ SHELL_EOF
     fi
 }
 
-# Update tauri.conf.json to include CLI bundle sidecar (unified cli-bundle with both Claude and Codex)
+# Update tauri.conf.json to include or remove CLI bundle sidecar
 update_tauri_config() {
-    if [ "$BUNDLE_CLI" != "true" ]; then
-        return 0
-    fi
-
-    log_info "Updating tauri.conf.json to include CLI bundle sidecar..."
-
     local config_file="$PROJECT_ROOT/src-tauri/tauri.conf.json"
 
-    # Use node to properly update JSON config
-    node -e "
+    if [ "$BUNDLE_CLI" = "true" ]; then
+        log_info "Updating tauri.conf.json to include CLI bundle sidecar..."
+
+        # Use node to properly update JSON config
+        node -e "
 const fs = require('fs');
 const config = JSON.parse(fs.readFileSync('$config_file', 'utf8'));
 
@@ -522,7 +523,34 @@ console.log('Added unified CLI bundle config');
 fs.writeFileSync('$config_file', JSON.stringify(config, null, 2));
 console.log('Config updated successfully');
 "
-    log_info "Updated tauri.conf.json with unified CLI bundle configuration"
+        log_info "Updated tauri.conf.json with unified CLI bundle configuration"
+    else
+        log_info "Removing CLI bundle config from tauri.conf.json (not using --with-cli)..."
+
+        # Remove CLI-related config when not bundling
+        node -e "
+const fs = require('fs');
+const config = JSON.parse(fs.readFileSync('$config_file', 'utf8'));
+
+// Remove claude and codex from externalBin
+if (config.bundle.externalBin) {
+    config.bundle.externalBin = config.bundle.externalBin.filter(bin =>
+        !bin.includes('claude') && !bin.includes('codex')
+    );
+}
+
+// Remove cli-bundle from resources
+if (config.bundle.resources) {
+    config.bundle.resources = config.bundle.resources.filter(r =>
+        !r.includes('cli-bundle') && !r.includes('claude-bundle') && !r.includes('codex-bundle')
+    );
+}
+
+fs.writeFileSync('$config_file', JSON.stringify(config, null, 2));
+console.log('Removed CLI bundle config');
+"
+        log_info "Removed CLI bundle config from tauri.conf.json"
+    fi
 }
 
 # Update tauri.conf.json to disable signing
@@ -564,6 +592,25 @@ build_linux() {
     log_info "Building for Linux x86_64..."
 
     local target="x86_64-unknown-linux-gnu"
+    local current_os=$(uname -s)
+
+    # Check if we're on macOS trying to cross-compile for Linux
+    if [ "$current_os" = "Darwin" ]; then
+        log_error "Cross-compiling Linux Tauri apps from macOS is not supported."
+        log_error "Tauri requires GTK libraries (pango, cairo, atk, etc.) which need a Linux sysroot."
+        log_info ""
+        log_info "Recommended solutions:"
+        log_info "  1. Use GitHub Actions (already configured in .github/workflows/build.yml)"
+        log_info "     - Push a tag: git tag v0.x.x && git push --tags"
+        log_info "     - Or manually trigger the workflow from GitHub Actions page"
+        log_info ""
+        log_info "  2. Use Docker with a Linux image:"
+        log_info "     docker run --rm -v \"\$(pwd)\":/app -w /app rust:latest bash -c \\"
+        log_info "       'apt-get update && apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf nodejs npm && npm i -g pnpm && ./scripts/build.sh linux'"
+        log_info ""
+        log_info "  3. Build on a real Linux machine or VM"
+        exit 1
+    fi
 
     # Build API sidecar first
     build_api_sidecar "$target"
@@ -587,9 +634,27 @@ build_linux() {
 build_windows() {
     log_info "Building for Windows x86_64..."
 
-    local target="x86_64-pc-windows-msvc"
+    local current_os=$(uname -s)
+    local target=""
 
-    # Build API sidecar first
+    # Determine target based on current platform
+    if [ "$current_os" = "Darwin" ] || [ "$current_os" = "Linux" ]; then
+        # Cross-compiling from macOS/Linux - use GNU toolchain
+        target="x86_64-pc-windows-gnu"
+        log_info "Cross-compiling from $current_os using GNU toolchain"
+
+        # Check for MinGW
+        if ! command -v x86_64-w64-mingw32-gcc &> /dev/null; then
+            log_error "MinGW is required for cross-compilation to Windows"
+            log_info "Install with: brew install mingw-w64 (macOS) or apt install mingw-w64 (Linux)"
+            exit 1
+        fi
+    else
+        # Building on Windows - use MSVC
+        target="x86_64-pc-windows-msvc"
+    fi
+
+    # Build API sidecar first (pkg can cross-compile)
     build_api_sidecar "$target"
 
     # Bundle CLI tools if requested (unified bundle with both Claude and Codex)
@@ -599,12 +664,23 @@ build_windows() {
     # Add target if not exists
     rustup target add "$target" 2>/dev/null || true
 
-    pnpm tauri build --target "$target"
-
-    # Config restore removed - no longer needed
+    # Set up linker for cross-compilation
+    if [ "$target" = "x86_64-pc-windows-gnu" ]; then
+        export CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER="x86_64-w64-mingw32-gcc"
+        # Skip NSIS/MSI bundling when cross-compiling (requires network/Windows tools)
+        log_info "Cross-compiling: skipping installer bundling (NSIS/MSI), generating exe only..."
+        pnpm tauri build --target "$target" --no-bundle
+    else
+        pnpm tauri build --target "$target"
+    fi
 
     log_info "Windows build completed!"
-    log_info "Output: src-tauri/target/$target/release/bundle/"
+    if [ "$target" = "x86_64-pc-windows-gnu" ]; then
+        log_info "Output: src-tauri/target/$target/release/workany.exe"
+        log_info "Note: MSI/NSIS installers require building on Windows"
+    else
+        log_info "Output: src-tauri/target/$target/release/bundle/"
+    fi
 }
 
 # Build for macOS Intel (x86_64)
@@ -999,7 +1075,7 @@ show_help() {
     echo ""
     echo "Platforms:"
     echo "  linux       - Build for Linux x86_64"
-    echo "  windows     - Build for Windows x86_64"
+    echo "  windows     - Build for Windows x86_64 (cross-compile from macOS/Linux supported)"
     echo "  mac-intel   - Build for macOS Intel (x86_64) ~30MB"
     echo "  mac-arm     - Build for macOS Apple Silicon (aarch64) ~27MB"
     echo "  current     - Build for current platform (default)"
@@ -1020,6 +1096,9 @@ show_help() {
     echo "  - pnpm"
     echo "  - Node.js (for API sidecar)"
     echo "  - Rust (cargo, rustup)"
+    echo "  - MinGW (for Windows cross-compilation from macOS/Linux)"
+    echo "    macOS: brew install mingw-w64"
+    echo "    Linux: apt install mingw-w64"
     echo ""
     echo "Examples:"
     echo "  ./scripts/build.sh                     # Build for current platform (no signing)"
@@ -1027,6 +1106,8 @@ show_help() {
     echo "  ./scripts/build.sh mac-arm --with-cli  # Build with bundled CLI tools"
     echo "  ./scripts/build.sh mac-arm --sign      # Build with signing and notarization"
     echo "  ./scripts/build.sh mac-arm --with-cli --sign  # Full release build"
+    echo "  ./scripts/build.sh windows             # Cross-compile for Windows from macOS"
+    echo "  ./scripts/build.sh windows --with-cli  # Windows with bundled CLI tools"
     echo ""
     echo "Note: Cross-compilation requires proper toolchain setup."
     echo "      For CI/CD builds, use GitHub Actions workflow instead."

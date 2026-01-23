@@ -52,7 +52,7 @@ const DEPENDENCIES: DependencyInfo[] = [
   {
     id: 'claude-code',
     name: 'Claude Code',
-    description: 'Anthropic CLI for AI-powered coding assistance',
+    description: 'Agent Runtime for task processing',
     required: true,
     checkCommand: 'which claude',
     versionCommand: 'claude --version 2>/dev/null || echo "unknown"',
@@ -66,8 +66,8 @@ const DEPENDENCIES: DependencyInfo[] = [
   },
   {
     id: 'codex',
-    name: 'Codex CLI',
-    description: 'OpenAI Codex command-line interface',
+    name: 'Codex',
+    description: 'Sandbox for script execution',
     required: false,
     checkCommand: 'which codex',
     versionCommand: 'codex --version 2>/dev/null || echo "unknown"',
@@ -76,45 +76,6 @@ const DEPENDENCIES: DependencyInfo[] = [
       manual: 'Visit https://github.com/openai/codex-cli',
     },
     installUrl: 'https://github.com/openai/codex-cli',
-  },
-  {
-    id: 'node',
-    name: 'Node.js',
-    description: 'JavaScript runtime for executing scripts',
-    required: true,
-    checkCommand: 'which node',
-    versionCommand: 'node --version',
-    installCommands: {
-      brew: 'brew install node',
-      manual: 'Visit https://nodejs.org',
-    },
-    installUrl: 'https://nodejs.org',
-  },
-  {
-    id: 'python',
-    name: 'Python',
-    description: 'Python runtime for executing scripts',
-    required: false,
-    checkCommand: 'which python3 || which python',
-    versionCommand:
-      'python3 --version 2>/dev/null || python --version 2>/dev/null',
-    installCommands: {
-      brew: 'brew install python',
-      manual: 'Visit https://python.org',
-    },
-    installUrl: 'https://python.org',
-  },
-  {
-    id: 'srt',
-    name: 'Sandbox Runtime',
-    description: 'Anthropic sandbox runtime for secure code execution',
-    required: false,
-    checkCommand: 'which srt',
-    versionCommand: 'srt --version 2>/dev/null || echo "unknown"',
-    installCommands: {
-      npm: 'npm install -g @anthropic-ai/sandbox-runtime',
-    },
-    installUrl: 'https://github.com/anthropics/sandbox-runtime',
   },
 ];
 

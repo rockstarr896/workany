@@ -2,12 +2,25 @@ name: Build and Release
 
 on:
   push:
+    branches:
+      - main
     tags:
       - "v*"
   workflow_dispatch:
     inputs:
+      platform:
+        description: "Platform to build"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - all
+          - linux
+          - windows
+          - macos-intel
+          - macos-arm64
       release:
-        description: "Create a release"
+        description: "Create a release after build"
         required: false
         default: false
         type: boolean
@@ -39,7 +52,7 @@ jobs:
             name: windows-x86_64
 
           # macOS Intel
-          - platform: macos
+          - platform: macos-intel
             os: macos-latest
             rust_target: x86_64-apple-darwin
             tauri_target: x86_64-apple-darwin
@@ -47,7 +60,7 @@ jobs:
             name: macos-intel
 
           # macOS Apple Silicon
-          - platform: macos
+          - platform: macos-arm64
             os: macos-latest
             rust_target: aarch64-apple-darwin
             tauri_target: aarch64-apple-darwin
@@ -55,6 +68,12 @@ jobs:
             name: macos-arm64
 
     runs-on: ${{ matrix.os }}
+
+    # Skip this job if platform doesn't match the input (for workflow_dispatch)
+    if: |
+      github.event_name != 'workflow_dispatch' ||
+      github.event.inputs.platform == 'all' ||
+      github.event.inputs.platform == matrix.platform
 
     steps:
       - name: Checkout repository
@@ -128,6 +147,13 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # macOS signing and notarization (only when secrets are configured)
+          APPLE_CERTIFICATE: ${{ startsWith(matrix.platform, 'macos') && secrets.APPLE_CERTIFICATE || '' }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ startsWith(matrix.platform, 'macos') && secrets.APPLE_CERTIFICATE_PASSWORD || '' }}
+          APPLE_SIGNING_IDENTITY: ${{ startsWith(matrix.platform, 'macos') && secrets.APPLE_SIGNING_IDENTITY || '' }}
+          APPLE_ID: ${{ startsWith(matrix.platform, 'macos') && secrets.APPLE_ID || '' }}
+          APPLE_PASSWORD: ${{ startsWith(matrix.platform, 'macos') && secrets.APPLE_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ startsWith(matrix.platform, 'macos') && secrets.APPLE_TEAM_ID || '' }}
         with:
           args: --target ${{ matrix.tauri_target }}
 
@@ -153,7 +179,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Upload artifacts (macOS)
-        if: matrix.platform == 'macos'
+        if: startsWith(matrix.platform, 'macos')
         uses: actions/upload-artifact@v4
         with:
           name: WorkAny-${{ matrix.name }}
