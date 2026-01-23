@@ -156,8 +156,16 @@ jobs:
           mkdir -p dist
           bun build src/index.ts --compile --target=${{ matrix.bun_target }} --outfile dist/workany-api-${{ matrix.rust_target }}.exe
 
-      - name: Build Tauri app
-        if: steps.check.outputs.skip != 'true'
+      - name: Build Tauri app (Linux - skip AppImage)
+        if: steps.check.outputs.skip != 'true' && matrix.platform == 'linux'
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          args: --target ${{ matrix.tauri_target }} --bundles deb,rpm
+
+      - name: Build Tauri app (Windows/macOS)
+        if: steps.check.outputs.skip != 'true' && matrix.platform != 'linux'
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -179,7 +187,6 @@ jobs:
           path: |
             src-tauri/target/${{ matrix.tauri_target }}/release/bundle/deb/*.deb
             src-tauri/target/${{ matrix.tauri_target }}/release/bundle/rpm/*.rpm
-            src-tauri/target/${{ matrix.tauri_target }}/release/bundle/appimage/*.AppImage
           if-no-files-found: ignore
 
       - name: Upload artifacts (Windows)
@@ -239,7 +246,6 @@ jobs:
           files: |
             artifacts/**/*.deb
             artifacts/**/*.rpm
-            artifacts/**/*.AppImage
             artifacts/**/*.msi
             artifacts/**/*.exe
             artifacts/**/*.dmg
