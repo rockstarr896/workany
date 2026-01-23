@@ -3,12 +3,20 @@ import os from 'os';
 import path from 'path';
 import { Hono } from 'hono';
 
+import { getAllMcpConfigPaths } from '../../config/constants';
+
 const mcp = new Hono();
 
 // MCP config file path: ~/.workany/mcp.json
 const getMcpConfigPath = (): string => {
   const homeDir = os.homedir();
   return path.join(homeDir, '.workany', 'mcp.json');
+};
+
+// Claude settings file path: ~/.claude/settings.json
+const getClaudeSettingsPath = (): string => {
+  const homeDir = os.homedir();
+  return path.join(homeDir, '.claude', 'settings.json');
 };
 
 // Ensure directory exists
@@ -127,6 +135,58 @@ mcp.get('/path', (c) => {
   return c.json({
     success: true,
     path: getMcpConfigPath(),
+  });
+});
+
+// GET /mcp/all-configs - Read MCP configs from all sources (workany and claude)
+mcp.get('/all-configs', async (c) => {
+  const configPaths = getAllMcpConfigPaths();
+  const results: {
+    name: string;
+    path: string;
+    exists: boolean;
+    servers: Record<string, MCPServerConfig>;
+  }[] = [];
+
+  for (const configInfo of configPaths) {
+    try {
+      await fs.access(configInfo.path);
+
+      const content = await fs.readFile(configInfo.path, 'utf-8');
+      const config = JSON.parse(content);
+
+      // Claude settings.json has a different structure
+      if (configInfo.name === 'claude') {
+        // Claude settings has mcpServers at root level
+        results.push({
+          name: configInfo.name,
+          path: configInfo.path,
+          exists: true,
+          servers: config.mcpServers || {},
+        });
+      } else {
+        // WorkAny mcp.json structure
+        results.push({
+          name: configInfo.name,
+          path: configInfo.path,
+          exists: true,
+          servers: config.mcpServers || {},
+        });
+      }
+    } catch {
+      // File doesn't exist or can't be read
+      results.push({
+        name: configInfo.name,
+        path: configInfo.path,
+        exists: false,
+        servers: {},
+      });
+    }
+  }
+
+  return c.json({
+    success: true,
+    configs: results,
   });
 });
 

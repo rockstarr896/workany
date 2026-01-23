@@ -70,6 +70,7 @@ export interface MCPServerUI {
   url?: string;
   headers?: Record<string, string>;
   autoExecute?: boolean;
+  source?: 'workany' | 'claude';
 }
 
 // Skill types

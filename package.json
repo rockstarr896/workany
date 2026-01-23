@@ -1,13 +1,15 @@
 {
   "name": "workany",
   "private": true,
-  "version": "0.1.6",
+  "version": "0.1.7",
   "type": "module",
   "scripts": {
     "ver": "./scripts/version.sh",
     "dev": "vite",
     "dev:api": "pnpm --filter workany-api dev",
-    "dev:all": "concurrently \"pnpm dev\" \"pnpm dev:api\"",
+    "dev:app": "pnpm tauri dev",
+    "dev:web": "pnpm dev",
+    "dev:all": "concurrently \"pnpm dev:api\" \"pnpm dev:app\"",
     "build": "tsc && vite build",
     "build:api": "pnpm --filter workany-api build",
     "build:api:binary": "pnpm --filter workany-api build:binary",

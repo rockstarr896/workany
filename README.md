@@ -4,29 +4,41 @@ WorkAny is a desktop AI agent application that executes tasks through natural la
 
 **Website:** [workany.ai](https://workany.ai)
 
-![](./public/previews/home.png)
+![](./public/imgs/home.png)
 
 ## Previews
 
 - Organize files
 
-![](./public/previews/files.png)
+![](./public/imgs/files.png)
 
 - Generate website
 
-![](./public/previews/web.png)
+![](./public/imgs/web.png)
 
 - Generate document
 
-![](./public/previews/doc.png)
+![](./public/imgs/doc.png)
 
-- Generate table
+- Generate data table
 
-![](./public/previews/excel.png)
+![](./public/imgs/excel.png)
 
 - Generate slides
 
-![](./public/previews/ppt.png)
+![](./public/imgs/ppt.png)
+
+- Use custom model provider for Agent.
+
+![](./public/imgs/settings.png)
+
+- Use Sandbox to execute Code
+
+![](./public/imgs/sandbox.png)
+
+- Agent Skills
+
+![](./public/imgs/skills.png)
 
 ## Features
 
@@ -73,8 +85,11 @@ pnpm install
 # Start API server
 pnpm dev:api
 
-# Start Tauri app (recommended)
-pnpm tauri dev
+# Start Web and Desktop App (recommended)
+pnpm dev:app
+
+# Start Web only (Optional)
+pnpm dev:web
 ```
 
 ## Contributing

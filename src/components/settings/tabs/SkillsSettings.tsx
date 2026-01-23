@@ -3,7 +3,6 @@ import { getSkillsDir } from '@/shared/lib/paths';
 import { cn } from '@/shared/lib/utils';
 import { useLanguage } from '@/shared/providers/language-provider';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
-import { openUrl } from '@tauri-apps/plugin-opener';
 import {
   ChevronDown,
   ChevronRight,
@@ -105,12 +104,20 @@ function SkillFileTreeItem({
   );
 }
 
-// Helper function to open external URLs
-const openExternalUrl = async (url: string) => {
+// Helper function to open folder in system file manager
+const openFolderInSystem = async (folderPath: string) => {
   try {
-    await openUrl(url);
-  } catch {
-    window.open(url, '_blank');
+    const response = await fetch(`${API_BASE_URL}/files/open`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: folderPath, expandHome: true }),
+    });
+    const data = await response.json();
+    if (!data.success) {
+      console.error('[Skills] Failed to open folder:', data.error);
+    }
+  } catch (err) {
+    console.error('[Skills] Error opening folder:', err);
   }
 };
 
@@ -145,34 +152,84 @@ export function SkillsSettings({
   });
 
   const loadSkillsFromPath = async (skillsPath: string) => {
-    if (!skillsPath) {
-      setSkills([]);
-      setLoading(false);
-      return;
-    }
-
     setLoading(true);
     try {
-      const filesResponse = await fetch(`${API_BASE_URL}/files/readdir`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: skillsPath, maxDepth: 3 }),
-      });
-      const filesData = await filesResponse.json();
+      // Get all skills directories (workany and claude)
+      const dirsResponse = await fetch(`${API_BASE_URL}/files/skills-dir`);
+      const dirsData = await dirsResponse.json();
 
       const allSkills: SkillInfo[] = [];
 
-      if (filesData.success && filesData.files) {
-        for (const folder of filesData.files) {
-          if (folder.isDir) {
-            allSkills.push({
-              id: `workany-${folder.name}`,
-              name: folder.name,
-              source: 'workany',
-              path: folder.path,
-              files: folder.children || [],
-              enabled: true,
+      // Load skills from all available directories
+      if (dirsData.directories) {
+        for (const dir of dirsData.directories as {
+          name: string;
+          path: string;
+          exists: boolean;
+        }[]) {
+          if (!dir.exists) continue;
+
+          try {
+            const filesResponse = await fetch(`${API_BASE_URL}/files/readdir`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ path: dir.path, maxDepth: 3 }),
             });
+            const filesData = await filesResponse.json();
+
+            if (filesData.success && filesData.files) {
+              for (const folder of filesData.files) {
+                if (folder.isDir) {
+                  allSkills.push({
+                    id: `${dir.name}-${folder.name}`,
+                    name: folder.name,
+                    source: dir.name as 'claude' | 'workany',
+                    path: folder.path,
+                    files: folder.children || [],
+                    enabled: true,
+                  });
+                }
+              }
+            }
+          } catch (err) {
+            console.error(
+              `[Skills] Failed to load skills from ${dir.name}:`,
+              err
+            );
+          }
+        }
+      }
+
+      // Also load from user-configured skillsPath if different from default directories
+      if (skillsPath) {
+        const isDefaultDir = dirsData.directories?.some(
+          (d: { path: string }) => d.path === skillsPath
+        );
+        if (!isDefaultDir) {
+          try {
+            const filesResponse = await fetch(`${API_BASE_URL}/files/readdir`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ path: skillsPath, maxDepth: 3 }),
+            });
+            const filesData = await filesResponse.json();
+
+            if (filesData.success && filesData.files) {
+              for (const folder of filesData.files) {
+                if (folder.isDir) {
+                  allSkills.push({
+                    id: `custom-${folder.name}`,
+                    name: folder.name,
+                    source: 'workany',
+                    path: folder.path,
+                    files: folder.children || [],
+                    enabled: true,
+                  });
+                }
+              }
+            }
+          } catch (err) {
+            console.error('[Skills] Failed to load skills from custom path:', err);
           }
         }
       }
@@ -306,11 +363,11 @@ export function SkillsSettings({
           </button>
         </div>
 
-        <div className="border-border border-t">
-          <div className="text-muted-foreground flex items-center px-4 py-2 text-xs font-medium">
+        <div className="border-border flex min-h-0 flex-1 flex-col border-t">
+          <div className="text-muted-foreground flex shrink-0 items-center px-4 py-2 text-xs font-medium">
             {t.settings.skillsList}
           </div>
-          <div className="flex-1 space-y-0.5 overflow-y-auto px-2 pb-2">
+          <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto px-2 pb-2">
             {sortedSkills.length === 0 ? (
               <div className="text-muted-foreground p-2 text-center text-xs">
                 {t.settings.skillsEmpty}
@@ -336,8 +393,13 @@ export function SkillsSettings({
                       <span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-emerald-500" />
                     )}
                   </span>
-                  <span className="flex-1 truncate text-left">
-                    {skill.name}
+                  <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                    <span className="truncate text-left">{skill.name}</span>
+                    {skill.source === 'claude' && (
+                      <span className="bg-blue-500/10 text-blue-600 dark:text-blue-400 shrink-0 rounded px-1 py-0.5 text-[10px] font-medium">
+                        claude
+                      </span>
+                    )}
                   </span>
                 </button>
               ))
@@ -500,9 +562,16 @@ export function SkillsSettings({
         ) : selectedSkill ? (
           <div className="p-6">
             <div className="mb-6 flex items-center justify-between">
-              <h3 className="text-foreground text-base font-medium">
-                {selectedSkill.name}
-              </h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-foreground text-base font-medium">
+                  {selectedSkill.name}
+                </h3>
+                {selectedSkill.source === 'claude' && (
+                  <span className="bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded px-1.5 py-0.5 text-xs font-medium">
+                    claude
+                  </span>
+                )}
+              </div>
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-1.5">
                   <div
@@ -557,9 +626,7 @@ export function SkillsSettings({
               </div>
 
               <button
-                onClick={() => {
-                  openExternalUrl(`file://${selectedSkill.path}`);
-                }}
+                onClick={() => openFolderInSystem(selectedSkill.path)}
                 className="border-border text-foreground hover:bg-accent flex h-10 items-center gap-2 rounded-lg border px-4 text-sm transition-colors"
               >
                 <FolderOpen className="size-4" />

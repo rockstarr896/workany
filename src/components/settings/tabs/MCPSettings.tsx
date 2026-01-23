@@ -55,42 +55,51 @@ export function MCPSettings({ settings, onSettingsChange }: SettingsTabProps) {
     return 0;
   });
 
-  // Load MCP config from API
+  // Load MCP config from all sources (workany and claude)
   useEffect(() => {
     async function loadMCPConfig() {
       setLoading(true);
       setError(null);
 
       try {
-        const response = await fetch(`${API_BASE_URL}/mcp/config`);
+        const response = await fetch(`${API_BASE_URL}/mcp/all-configs`);
         const result = await response.json();
 
         if (!result.success) {
           throw new Error(result.error || 'Failed to load config');
         }
 
-        const config: MCPConfig = result.data;
+        const serverList: MCPServerUI[] = [];
 
-        const serverList: MCPServerUI[] = Object.entries(
-          config.mcpServers || {}
-        ).map(([id, serverConfig]) => {
-          const isHttp = 'url' in serverConfig;
-          return {
-            id,
-            name: id,
-            type: isHttp ? 'http' : 'stdio',
-            enabled: true,
-            command: isHttp
-              ? undefined
-              : (serverConfig as MCPServerStdio).command,
-            args: isHttp ? undefined : (serverConfig as MCPServerStdio).args,
-            url: isHttp ? (serverConfig as { url: string }).url : undefined,
-            headers: isHttp
-              ? (serverConfig as { headers?: Record<string, string> }).headers
-              : undefined,
-            autoExecute: true,
-          };
-        });
+        // Load servers from all config sources
+        for (const configInfo of result.configs as {
+          name: string;
+          path: string;
+          exists: boolean;
+          servers: Record<string, MCPServerStdio | { url: string; headers?: Record<string, string> }>;
+        }[]) {
+          if (!configInfo.exists) continue;
+
+          for (const [id, serverConfig] of Object.entries(configInfo.servers)) {
+            const isHttp = 'url' in serverConfig;
+            serverList.push({
+              id: `${configInfo.name}-${id}`,
+              name: id,
+              type: isHttp ? 'http' : 'stdio',
+              enabled: true,
+              command: isHttp
+                ? undefined
+                : (serverConfig as MCPServerStdio).command,
+              args: isHttp ? undefined : (serverConfig as MCPServerStdio).args,
+              url: isHttp ? (serverConfig as { url: string }).url : undefined,
+              headers: isHttp
+                ? (serverConfig as { headers?: Record<string, string> }).headers
+                : undefined,
+              autoExecute: true,
+              source: configInfo.name as 'workany' | 'claude',
+            });
+          }
+        }
 
         setServers(serverList);
       } catch (err) {
@@ -105,19 +114,21 @@ export function MCPSettings({ settings, onSettingsChange }: SettingsTabProps) {
     loadMCPConfig();
   }, []);
 
-  // Save MCP config via API
+  // Save MCP config via API (only saves workany servers)
   const saveMCPConfig = async (serverList: MCPServerUI[]) => {
     try {
       const mcpServers: Record<string, unknown> = {};
       for (const server of serverList) {
+        // Only save workany servers, skip claude servers
+        if (server.source === 'claude') continue;
         if (!server.enabled) continue;
         if (server.type === 'http') {
-          mcpServers[server.id] = {
+          mcpServers[server.name] = {
             url: server.url || '',
             headers: server.headers,
           };
         } else {
-          mcpServers[server.id] = {
+          mcpServers[server.name] = {
             command: server.command || '',
             args: server.args,
           };
@@ -161,12 +172,15 @@ export function MCPSettings({ settings, onSettingsChange }: SettingsTabProps) {
 
   const handleAddServer = () => {
     if (!newServer.id) return;
-    if (servers.some((s) => s.id === newServer.id)) return;
+    const fullId = `workany-${newServer.id}`;
+    if (servers.some((s) => s.id === fullId || s.name === newServer.id)) return;
 
     const serverToAdd: MCPServerUI = {
       ...newServer,
-      name: newServer.name || newServer.id,
+      id: fullId,
+      name: newServer.id,
       enabled: false,
+      source: 'workany',
     };
 
     const newServers = [...servers, serverToAdd];
@@ -189,6 +203,10 @@ export function MCPSettings({ settings, onSettingsChange }: SettingsTabProps) {
   };
 
   const handleDeleteServer = (serverId: string) => {
+    const server = servers.find((s) => s.id === serverId);
+    // Only allow deleting workany servers
+    if (!server || server.source === 'claude') return;
+
     const newServers = servers.filter((s) => s.id !== serverId);
     setServers(newServers);
     saveMCPConfig(newServers);
@@ -254,11 +272,11 @@ export function MCPSettings({ settings, onSettingsChange }: SettingsTabProps) {
           </button>
         </div>
 
-        <div className="border-border border-t">
-          <div className="text-muted-foreground flex items-center px-4 py-2 text-xs font-medium">
+        <div className="border-border flex min-h-0 flex-1 flex-col border-t">
+          <div className="text-muted-foreground flex shrink-0 items-center px-4 py-2 text-xs font-medium">
             {t.settings.mcpServers}
           </div>
-          <div className="flex-1 space-y-0.5 overflow-y-auto px-2 pb-2">
+          <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto px-2 pb-2">
             {error ? (
               <div className="p-2 text-center text-xs text-red-500">
                 {error}
@@ -288,7 +306,14 @@ export function MCPSettings({ settings, onSettingsChange }: SettingsTabProps) {
                       <span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-emerald-500" />
                     )}
                   </span>
-                  <span className="flex-1 truncate text-left">{server.id}</span>
+                  <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                    <span className="truncate text-left">{server.name}</span>
+                    {server.source === 'claude' && (
+                      <span className="bg-blue-500/10 text-blue-600 dark:text-blue-400 shrink-0 rounded px-1 py-0.5 text-[10px] font-medium">
+                        claude
+                      </span>
+                    )}
+                  </span>
                 </button>
               ))
             )}
@@ -303,7 +328,7 @@ export function MCPSettings({ settings, onSettingsChange }: SettingsTabProps) {
           >
             <Plus className="size-4" />
           </button>
-          {selectedServer && (
+          {selectedServer && selectedServer.source !== 'claude' && (
             <button
               onClick={() => handleDeleteServer(selectedServer.id)}
               className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive flex size-7 items-center justify-center rounded transition-colors"
@@ -496,9 +521,16 @@ export function MCPSettings({ settings, onSettingsChange }: SettingsTabProps) {
         ) : selectedServer ? (
           <div className="p-6">
             <div className="mb-6 flex items-center justify-between">
-              <h3 className="text-foreground text-base font-medium">
-                {selectedServer.id}
-              </h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-foreground text-base font-medium">
+                  {selectedServer.name}
+                </h3>
+                {selectedServer.source === 'claude' && (
+                  <span className="bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded px-1.5 py-0.5 text-xs font-medium">
+                    claude
+                  </span>
+                )}
+              </div>
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-1.5">
                   <div
