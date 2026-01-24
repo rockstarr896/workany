@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { startTransition, useEffect, useRef, useState } from 'react';
 import { API_BASE_URL } from '@/config';
 import type { AgentMessage } from '@/shared/hooks/useAgent';
 import { cn } from '@/shared/lib/utils';
@@ -1038,9 +1038,18 @@ export function RightSidebar({
     }
   }
 
+  // Cache for loaded working directory to avoid redundant loads
+  const workingDirCacheRef = useRef<{
+    dir: string;
+    files: WorkingFile[];
+    version: number;
+  } | null>(null);
+
   // Load files from working directory via API
   // Refresh when workingDir changes, artifacts change, or files are added (e.g., attachments)
   useEffect(() => {
+    let cancelled = false;
+
     async function loadWorkingFiles() {
       if (!workingDir || !workingDir.startsWith('/')) {
         setWorkingFiles([]);
@@ -1048,18 +1057,51 @@ export function RightSidebar({
         return;
       }
 
+      // Check cache: skip loading if same dir and version
+      const cache = workingDirCacheRef.current;
+      if (
+        cache &&
+        cache.dir === workingDir &&
+        cache.version === filesVersion &&
+        cache.files.length > 0
+      ) {
+        // Use cached data, no need to reload
+        setWorkingFiles(cache.files);
+        setLoadingFiles(false);
+        return;
+      }
+
       setLoadingFiles(true);
       try {
         const files = await readDirViaApi(workingDir);
-        setWorkingFiles(files);
+        if (cancelled) return;
+
+        // Update cache
+        workingDirCacheRef.current = {
+          dir: workingDir,
+          files,
+          version: filesVersion,
+        };
+
+        // Use startTransition to mark this as a low-priority update
+        startTransition(() => {
+          setWorkingFiles(files);
+        });
       } catch {
+        if (cancelled) return;
         setWorkingFiles([]);
       } finally {
-        setLoadingFiles(false);
+        if (!cancelled) {
+          setLoadingFiles(false);
+        }
       }
     }
 
     loadWorkingFiles();
+
+    return () => {
+      cancelled = true;
+    };
   }, [workingDir, externalArtifacts.length, filesVersion]);
 
   // Get used skill names from messages

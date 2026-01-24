@@ -138,6 +138,9 @@ export function LeftSidebar({
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [taskToDelete, setTaskToDelete] = useState<string | null>(null);
 
+  // Loading state for task switching
+  const [loadingTaskId, setLoadingTaskId] = useState<string | null>(null);
+
   const handleDeleteClick = (taskId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     setTaskToDelete(taskId);
@@ -181,7 +184,18 @@ export function LeftSidebar({
   };
 
   const handleSelectTask = (taskId: string) => {
-    navigate(`/task/${taskId}`);
+    // Skip if already on this task or already loading
+    if (taskId === currentTaskId || loadingTaskId) return;
+
+    // Show loading state immediately
+    setLoadingTaskId(taskId);
+
+    // Use requestAnimationFrame to ensure UI updates before navigation
+    requestAnimationFrame(() => {
+      navigate(`/task/${taskId}`);
+      // Clear loading state after a short delay (navigation should complete)
+      setTimeout(() => setLoadingTaskId(null), 100);
+    });
   };
 
   const handleSettings = () => {
@@ -250,21 +264,27 @@ export function LeftSidebar({
                   const isRunningInBackground = runningTaskIds.includes(
                     task.id
                   );
+                  const isLoading = loadingTaskId === task.id;
                   return (
                     <div
                       key={task.id}
                       className={cn(
                         'group relative flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2 py-2 transition-all duration-200',
-                        currentTaskId === task.id
+                        currentTaskId === task.id || isLoading
                           ? 'bg-sidebar-accent text-sidebar-accent-foreground shadow-sm'
-                          : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
+                          : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground',
+                        isLoading && 'opacity-70'
                       )}
                       onClick={() => handleSelectTask(task.id)}
                     >
                       <div className="relative shrink-0">
-                        <TaskIcon className="size-4" />
+                        {isLoading ? (
+                          <Loader2 className="size-4 animate-spin" />
+                        ) : (
+                          <TaskIcon className="size-4" />
+                        )}
                         {/* Running indicator */}
-                        {isRunningInBackground && (
+                        {isRunningInBackground && !isLoading && (
                           <span className="absolute -top-0.5 -right-0.5 flex size-2">
                             <span className="absolute inline-flex size-full animate-ping rounded-full bg-green-400 opacity-75" />
                             <span className="relative inline-flex size-2 rounded-full bg-green-500" />
@@ -486,21 +506,27 @@ export function LeftSidebar({
                               const TaskIcon = getTaskIcon(task.prompt);
                               const isRunningInBackground =
                                 runningTaskIds.includes(task.id);
+                              const isLoading = loadingTaskId === task.id;
                               return (
                                 <div
                                   key={task.id}
                                   className={cn(
                                     'group flex w-full cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors',
-                                    currentTaskId === task.id
+                                    currentTaskId === task.id || isLoading
                                       ? 'bg-accent text-accent-foreground'
-                                      : 'text-foreground/80 hover:bg-accent/50'
+                                      : 'text-foreground/80 hover:bg-accent/50',
+                                    isLoading && 'opacity-70'
                                   )}
                                   onClick={() => handleSelectTask(task.id)}
                                 >
                                   <div className="relative shrink-0">
-                                    <TaskIcon className="text-muted-foreground size-5" />
+                                    {isLoading ? (
+                                      <Loader2 className="text-muted-foreground size-5 animate-spin" />
+                                    ) : (
+                                      <TaskIcon className="text-muted-foreground size-5" />
+                                    )}
                                     {/* Running indicator */}
-                                    {isRunningInBackground && (
+                                    {isRunningInBackground && !isLoading && (
                                       <span className="absolute -top-0.5 -right-0.5 flex size-2">
                                         <span className="absolute inline-flex size-full animate-ping rounded-full bg-green-400 opacity-75" />
                                         <span className="relative inline-flex size-2 rounded-full bg-green-500" />

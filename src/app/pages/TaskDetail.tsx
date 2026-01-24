@@ -790,7 +790,7 @@ function TaskDetailContent() {
                 )}
               >
                 {isLoading ? (
-                  <div className="flex h-full items-center justify-center">
+                  <div className="flex min-h-[200px] items-center justify-center py-12">
                     <div className="text-muted-foreground flex items-center gap-3">
                       <div className="size-5 animate-spin rounded-full border-2 border-current border-t-transparent" />
                       <span>{t.common.loading}</span>
