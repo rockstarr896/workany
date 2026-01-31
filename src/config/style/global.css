@@ -12,6 +12,21 @@
   }
   body {
     @apply bg-background text-foreground;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  
+  /* Typography optimization */
+  h1, h2, h3 {
+    text-wrap: balance;
+  }
+  p {
+    text-wrap: pretty;
+  }
+  
+  /* Tabular numbers for data */
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
   }
 }
 
@@ -118,26 +133,37 @@ pre {
   mix-blend-mode: normal;
 }
 
-:root {
-  --sidebar: hsl(0 0% 98%);
-  --sidebar-foreground: hsl(240 5.3% 26.1%);
-  --sidebar-primary: hsl(240 5.9% 10%);
-  --sidebar-primary-foreground: hsl(0 0% 98%);
-  --sidebar-accent: hsl(240 4.8% 95.9%);
-  --sidebar-accent-foreground: hsl(240 5.9% 10%);
-  --sidebar-border: hsl(220 13% 91%);
-  --sidebar-ring: hsl(217.2 91.2% 59.8%);
+/* Focus-visible optimization - no focus ring on click, only keyboard */
+*:focus {
+  outline: none;
 }
 
+*:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+/* Respect reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Dark mode color scheme for native elements */
 .dark {
-  --sidebar: hsl(240 5.9% 10%);
-  --sidebar-foreground: hsl(240 4.8% 95.9%);
-  --sidebar-primary: hsl(224.3 76.3% 48%);
-  --sidebar-primary-foreground: hsl(0 0% 100%);
-  --sidebar-accent: hsl(240 3.7% 15.9%);
-  --sidebar-accent-foreground: hsl(240 4.8% 95.9%);
-  --sidebar-border: hsl(240 3.7% 15.9%);
-  --sidebar-ring: hsl(217.2 91.2% 59.8%);
+  color-scheme: dark;
+}
+
+/* Native select fix for dark mode */
+.dark select {
+  background-color: var(--background);
+  color: var(--foreground);
 }
 
 .prose-sm {
@@ -191,7 +217,7 @@ td {
 /* Dark mode specific fixes */
 .dark {
   /* Ensure proper contrast for muted text */
-  --muted-foreground: oklch(0.7 0 0);
+  --muted-foreground: oklch(0.65 0 0);
 }
 
 /* Code block styling */

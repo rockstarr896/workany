@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import ImageLogo from '@/assets/logo.png';
+import { Logo } from '@/components/common/logo';
 import { useLanguage } from '@/shared/providers/language-provider';
 import { getVersion } from '@tauri-apps/api/app';
 import { openUrl } from '@tauri-apps/plugin-opener';
@@ -35,9 +35,9 @@ export function AboutSettings() {
       {/* Product Info */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <img src={ImageLogo} alt="WorkAny" className="size-16 rounded-xl" />
+          <Logo className="size-16 rounded-xl" />
           <div>
-            <h2 className="text-foreground text-xl font-bold">WorkAny</h2>
+            <h2 className="text-foreground text-xl font-bold">灵思</h2>
             <p className="text-muted-foreground text-sm">
               {t.settings.aiPlatform}
             </p>
@@ -118,7 +118,7 @@ export function AboutSettings() {
             }
             className="text-foreground hover:text-primary flex cursor-pointer items-center gap-1 text-sm font-medium transition-colors"
           >
-            WorkAny Community License
+            灵思 Community License
             <ExternalLink className="size-3" />
           </button>
         </div>

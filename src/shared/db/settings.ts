@@ -136,46 +136,46 @@ export const accentColors: {
   darkColor: string;
 }[] = [
   {
-    id: 'orange',
-    name: 'Orange',
-    color: 'oklch(0.6716 0.1368 48.513)',
-    darkColor: 'oklch(0.7214 0.1337 49.9802)',
-  },
-  {
     id: 'blue',
     name: 'Blue',
-    color: 'oklch(0.5469 0.1914 262.881)',
-    darkColor: 'oklch(0.6232 0.1914 262.881)',
+    color: 'oklch(0.62 0.19 220)', // #1890FF - Ant Design 蓝
+    darkColor: 'oklch(0.70 0.17 220)', // #40A9FF - 亮蓝
+  },
+  {
+    id: 'orange',
+    name: 'Orange',
+    color: 'oklch(0.70 0.15 50)', // #FA8C16 - Ant Design 橙
+    darkColor: 'oklch(0.75 0.14 50)', // #FFA940 - 亮橙
   },
   {
     id: 'green',
     name: 'Green',
-    color: 'oklch(0.5966 0.1397 149.214)',
-    darkColor: 'oklch(0.6489 0.1397 149.214)',
+    color: 'oklch(0.65 0.18 160)', // #52C41A - Ant Design 绿
+    darkColor: 'oklch(0.72 0.16 160)', // #73D13D - 亮绿
   },
   {
     id: 'purple',
     name: 'Purple',
-    color: 'oklch(0.5412 0.1879 293.541)',
-    darkColor: 'oklch(0.6135 0.1879 293.541)',
+    color: 'oklch(0.55 0.20 285)', // #722ED1 - Ant Design 紫
+    darkColor: 'oklch(0.65 0.18 285)', // #9254DE - 亮紫
   },
   {
     id: 'pink',
     name: 'Pink',
-    color: 'oklch(0.6171 0.1762 349.761)',
-    darkColor: 'oklch(0.6894 0.1762 349.761)',
+    color: 'oklch(0.60 0.20 330)', // #EB2F96 - Ant Design 粉
+    darkColor: 'oklch(0.68 0.18 330)', // #F759AB - 亮粉
   },
   {
     id: 'red',
     name: 'Red',
-    color: 'oklch(0.5772 0.2077 27.325)',
-    darkColor: 'oklch(0.6495 0.2077 27.325)',
+    color: 'oklch(0.55 0.22 25)', // #F5222D - Ant Design 红
+    darkColor: 'oklch(0.62 0.20 25)', // #FF4D4F - 亮红
   },
   {
     id: 'sage',
     name: 'Sage',
-    color: 'oklch(0.4531 0.0891 152.535)', // Dark forest green
-    darkColor: 'oklch(0.5654 0.1091 152.535)',
+    color: 'oklch(0.50 0.10 160)', // 深绿灰
+    darkColor: 'oklch(0.60 0.12 160)', // 亮绿灰
   },
 ];
 
@@ -403,7 +403,7 @@ export const defaultSettings: Settings = {
   maxConversationTurns: 20, // Default: 20 conversation turns
   maxHistoryTokens: 2000, // Default: 2000 tokens for history
   theme: 'system',
-  accentColor: 'orange',
+  accentColor: 'blue', // Default: Ant Design 蓝
   backgroundStyle: 'default',
   language: '', // Empty string triggers system language detection on first run
 };

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import ImageLogo from '@/assets/logo.png';
+import { Logo } from '@/components/common/logo';
 import type { Task } from '@/shared/db';
 import { getSettings, type UserProfile } from '@/shared/db/settings';
 import { cn } from '@/shared/lib/utils';
@@ -221,15 +221,9 @@ export function LeftSidebar({
             {/* Logo & Toggle */}
             <div className="flex shrink-0 items-center justify-between gap-3 p-4">
               <div className="flex items-center gap-2.5">
-                <div className="flex size-9 items-center justify-center rounded-xl">
-                  <img
-                    src={ImageLogo}
-                    alt="WorkAny"
-                    className="text-primary size-9"
-                  />
-                </div>
-                <span className="text-sidebar-foreground font-mono text-lg font-medium tracking-wide">
-                  WorkAny
+                <Logo className="size-9" />
+                <span className="text-sidebar-foreground text-lg font-medium tracking-wide">
+                  灵思
                 </span>
               </div>
               <button
@@ -439,12 +433,7 @@ export function LeftSidebar({
                 onMouseLeave={() => setLogoHovered(false)}
                 className="hover:bg-sidebar-accent relative flex size-9 cursor-pointer items-center justify-center rounded-xl transition-all duration-200"
               >
-                {logoHovered ? (
-                  // <PanelLeftOpen className="text-sidebar-foreground size-5" />
-                  <img src={ImageLogo} alt="WorkAny" className="size-9" />
-                ) : (
-                  <img src={ImageLogo} alt="WorkAny" className="size-9" />
-                )}
+                <Logo className="size-9" />
               </button>
             </div>
 
