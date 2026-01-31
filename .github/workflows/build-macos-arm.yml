@@ -1,0 +1,257 @@
+name: Build macOS ARM
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+  workflow_dispatch:
+
+env:
+  CARGO_INCREMENTAL: 0
+  RUST_BACKTRACE: short
+  RUST_TARGET: aarch64-apple-darwin
+  TAURI_TARGET: aarch64-apple-darwin
+  BUN_TARGET: bun-darwin-arm64
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Get pnpm store directory
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ env.RUST_TARGET }}
+
+      - name: Setup Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+          shared-key: macos-arm64
+
+      - name: Install frontend dependencies
+        run: pnpm install
+
+      - name: Build API sidecar
+        run: |
+          cd src-api
+          mkdir -p dist
+          bun build src/index.ts --compile --target=${{ env.BUN_TARGET }} --outfile dist/workany-api-${{ env.RUST_TARGET }}
+
+      - name: Bundle CLI tools
+        run: |
+          cd src-api/dist
+          mkdir -p cli-bundle
+          cd cli-bundle
+
+          # Download Node.js for macOS ARM64
+          NODE_VERSION="22.2.0"
+          NODE_FILENAME="node-v${NODE_VERSION}-darwin-arm64"
+          curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/${NODE_FILENAME}.tar.gz" | tar xz
+          cp "${NODE_FILENAME}/bin/node" ./node
+          chmod +x ./node
+          rm -rf "${NODE_FILENAME}"
+
+          # Install CLI packages
+          echo '{"name":"cli-bundle","private":true,"type":"module"}' > package.json
+          npm install @anthropic-ai/claude-code @openai/codex --registry=https://registry.npmmirror.com
+
+          # Copy wasm files
+          cp node_modules/@anthropic-ai/claude-code/*.wasm . 2>/dev/null || true
+
+          # Clean up unused platform binaries (keep ARM64 macOS only)
+          if [ -d "node_modules/@openai/codex/vendor" ]; then
+            for dir in node_modules/@openai/codex/vendor/*; do
+              dirname=$(basename "$dir")
+              if [ "$dirname" != "aarch64-apple-darwin" ] && [ -d "$dir" ]; then
+                rm -rf "$dir"
+              fi
+            done
+          fi
+
+          # Clean @anthropic-ai/claude-code vendor/ripgrep
+          if [ -d "node_modules/@anthropic-ai/claude-code/vendor/ripgrep" ]; then
+            for item in node_modules/@anthropic-ai/claude-code/vendor/ripgrep/*; do
+              itemname=$(basename "$item")
+              if [ -d "$item" ] && [ "$itemname" != "arm64-darwin" ]; then
+                rm -rf "$item"
+              fi
+            done
+          fi
+
+          cd ..
+
+          # Create claude launcher script
+          echo "IyEvYmluL2Jhc2gKU0NSSVBUX0RJUj0iJChjZCAiJChkaXJuYW1lICIkMCIpIiAmJiBwd2QpIgpmb3IgRElSIGluICIkU0NSSVBUX0RJUi9jbGktYnVuZGxlIiBcCiAgICAgICAgICAgIiRTQ1JJUFRfRElSL191cF8vc3JjLWFwaS9kaXN0L2NsaS1idW5kbGUiIFwKICAgICAgICAgICAiJFNDUklQVF9ESVIvLi4vUmVzb3VyY2VzL191cF8vc3JjLWFwaS9kaXN0L2NsaS1idW5kbGUiIFwKICAgICAgICAgICAiJFNDUklQVF9ESVIvLi4vUmVzb3VyY2VzL2NsaS1idW5kbGUiIFwKICAgICAgICAgICAiJFNDUklQVF9ESVIvLi4vbGliL1dvcmtBbnkvX3VwXy9zcmMtYXBpL2Rpc3QvY2xpLWJ1bmRsZSIgXAogICAgICAgICAgICIkU0NSSVBUX0RJUi8uLi9saWIvd29ya2FueS9fdXBfL3NyYy1hcGkvZGlzdC9jbGktYnVuZGxlIjsgZG8KICAgIGlmIFsgLWYgIiRESVIvbm9kZSIgXSAmJiBbIC1kICIkRElSL25vZGVfbW9kdWxlcyIgXTsgdGhlbgogICAgICAgIEJVTkRMRV9ESVI9IiRESVIiCiAgICAgICAgYnJlYWsKICAgIGZpCmRvbmUKaWYgWyAteiAiJEJVTkRMRV9ESVIiIF07IHRoZW4KICAgIGVjaG8gIkVycm9yOiBjbGktYnVuZGxlIG5vdCBmb3VuZC4gU2VhcmNoZWQgcGF0aHM6IiA+JjIKICAgIGVjaG8gIiAgLSAkU0NSSVBUX0RJUi9jbGktYnVuZGxlIiA+JjIKICAgIGVjaG8gIiAgLSAkU0NSSVBUX0RJUi9fdXBfL3NyYy1hcGkvZGlzdC9jbGktYnVuZGxlIiA+JjIKICAgIGVjaG8gIiAgLSAkU0NSSVBUX0RJUi8uLi9SZXNvdXJjZXMvX3VwXy9zcmMtYXBpL2Rpc3QvY2xpLWJ1bmRsZSIgPiYyCiAgICBlY2hvICIgIC0gJFNDUklQVF9ESVIvLi4vbGliL1dvcmtBbnkvX3VwXy9zcmMtYXBpL2Rpc3QvY2xpLWJ1bmRsZSIgPiYyCiAgICBleGl0IDEKZmkKZXhlYyAiJEJVTkRMRV9ESVIvbm9kZSIgIiRCVU5ETEVfRElSL25vZGVfbW9kdWxlcy9AYW50aHJvcGljLWFpL2NsYXVkZS1jb2RlL2NsaS5qcyIgIiRAIgo=" | base64 -d > claude
+          chmod +x claude
+          cp claude "claude-${{ env.RUST_TARGET }}"
+
+          # Create codex launcher script
+          echo "IyEvYmluL2Jhc2gKU0NSSVBUX0RJUj0iJChjZCAiJChkaXJuYW1lICIkMCIpIiAmJiBwd2QpIgpmb3IgRElSIGluICIkU0NSSVBUX0RJUi9jbGktYnVuZGxlIiBcCiAgICAgICAgICAgIiRTQ1JJUFRfRElSL191cF8vc3JjLWFwaS9kaXN0L2NsaS1idW5kbGUiIFwKICAgICAgICAgICAiJFNDUklQVF9ESVIvLi4vUmVzb3VyY2VzL191cF8vc3JjLWFwaS9kaXN0L2NsaS1idW5kbGUiIFwKICAgICAgICAgICAiJFNDUklQVF9ESVIvLi4vUmVzb3VyY2VzL2NsaS1idW5kbGUiIFwKICAgICAgICAgICAiJFNDUklQVF9ESVIvLi4vbGliL1dvcmtBbnkvX3VwXy9zcmMtYXBpL2Rpc3QvY2xpLWJ1bmRsZSIgXAogICAgICAgICAgICIkU0NSSVBUX0RJUi8uLi9saWIvd29ya2FueS9fdXBfL3NyYy1hcGkvZGlzdC9jbGktYnVuZGxlIjsgZG8KICAgIGlmIFsgLWYgIiRESVIvbm9kZSIgXSAmJiBbIC1kICIkRElSL25vZGVfb2R1bGVzIiBdOyB0aGVuCiAgICAgICAgQlVORExFX0RJUj0iJERJUiIKICAgICAgICBicmVhawogICAgZmkKZG9uZQppZiBbIC16ICIkQVVETExFX0RJUiIgXTsgdGhlbgogICAgZWNobyAiRXJyb3I6IGNsaS1idW5kbGUgbm90IGZvdW5kLiBTZWFyY2hlZCBwYXRoczoiID4mMgogICAgZWNobyAiICAtICRTQ1JJUFRfRElSL2NsaS1idW5kbGUiID4mMgogICAgZWNobyAiICAtICRTQ1JJUFRfRElSL191cF8vc3JjLWFwaS9kaXN0L2NsaS1idW5kbGUiID4mMgogICAgZWNobyAiICAtICRTQ1JJUFRfRElSLi4vUmVzb3VyY2VzL191cF8vc3JjLWFwaS9kaXN0L2NsaS1idW5kbGUiID4mMgogICAgZWNobyAiICAtICRTQ1JJUFRfRElSLi4vbGliL1dvcmtBbnkvX3VwXy9zcmMtYXBpL2Rpc3QvY2xpLWJ1bmRsZSIgPiYyCiAgICBleGl0IDEKZmkKZXhlYyAiJEJVTkRMRV9ESVIvbm9kZSIgIiRCVU5ETEVfRElSL25vZGVfbW9kdWxlcy9Ab3BlbmFpL2NvZGV4L2Jpbi9jb2RleC5qcyIgIiRAIgo=" | base64 -d > codex
+          chmod +x codex
+          cp codex "codex-${{ env.RUST_TARGET }}"
+
+          echo "CLI bundle created successfully"
+          ls -la cli-bundle/
+
+      - name: Sign CLI bundle binaries (macOS)
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          # Import certificate
+          CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
+          ENTITLEMENTS_FILE="${GITHUB_WORKSPACE}/src-tauri/entitlements.plist"
+
+          # Decode and save certificate
+          echo -n "$APPLE_CERTIFICATE" | base64 --decode -o $CERTIFICATE_PATH
+
+          # Create temporary keychain
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+          # Import certificate to keychain
+          security import $CERTIFICATE_PATH -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security list-keychain -d user -s $KEYCHAIN_PATH
+
+          # Sign all executable binaries in cli-bundle
+          echo "Signing binaries in cli-bundle..."
+          cd src-api/dist/cli-bundle
+
+          # Sign node binary first with entitlements
+          if [ -f "node" ]; then
+            echo "Signing node with entitlements..."
+            codesign --force --options runtime --entitlements "$ENTITLEMENTS_FILE" --sign "$APPLE_SIGNING_IDENTITY" --timestamp node
+          fi
+
+          # Sign ALL .dylib files
+          echo "Signing all .dylib files..."
+          find . -name "*.dylib" -type f | while read -r file; do
+            echo "Signing $file..."
+            codesign --force --options runtime --sign "$APPLE_SIGNING_IDENTITY" --timestamp "$file" || true
+          done
+
+          # Sign ALL .node files
+          echo "Signing all .node files..."
+          find . -name "*.node" -type f | while read -r file; do
+            echo "Signing $file..."
+            codesign --force --options runtime --sign "$APPLE_SIGNING_IDENTITY" --timestamp "$file" || true
+          done
+
+          # Sign ripgrep and other Mach-O executables
+          echo "Signing Mach-O executable binaries..."
+          find . -type f \( -name "rg" -o -perm -u+x \) 2>/dev/null | while read -r file; do
+            case "$file" in
+              *.js|*.json|*.md|*.txt|*.ts|*.mjs|*.cjs|*.map|*.yml|*.yaml) continue ;;
+            esac
+            filename=$(basename "$file")
+            if [ "$filename" = "node" ]; then
+              continue
+            fi
+            if file "$file" 2>/dev/null | grep -q "Mach-O"; then
+              echo "Signing Mach-O: $file..."
+              codesign --force --options runtime --sign "$APPLE_SIGNING_IDENTITY" --timestamp "$file" || true
+            fi
+          done
+
+          cd ../../..
+
+          # Sign the launcher scripts
+          echo "Signing launcher scripts..."
+          codesign --force --options runtime --sign "$APPLE_SIGNING_IDENTITY" --timestamp src-api/dist/claude
+          codesign --force --options runtime --sign "$APPLE_SIGNING_IDENTITY" --timestamp src-api/dist/codex
+
+          echo "All binaries signed successfully"
+
+          # Cleanup
+          security delete-keychain $KEYCHAIN_PATH
+          rm -f $CERTIFICATE_PATH
+
+      - name: Update tauri.conf.json for CLI bundle
+        run: |
+          node -e "
+          const fs = require('fs');
+          const config = JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json', 'utf8'));
+
+          if (!config.bundle.externalBin) config.bundle.externalBin = [];
+          if (!config.bundle.resources) config.bundle.resources = [];
+
+          if (!config.bundle.externalBin.includes('../src-api/dist/claude')) {
+            config.bundle.externalBin.unshift('../src-api/dist/claude');
+          }
+          if (!config.bundle.externalBin.includes('../src-api/dist/codex')) {
+            config.bundle.externalBin.unshift('../src-api/dist/codex');
+          }
+
+          const cliResource = '../src-api/dist/cli-bundle/**/*';
+          if (!config.bundle.resources.includes(cliResource)) {
+            config.bundle.resources = config.bundle.resources.filter(r =>
+              !r.includes('cli-bundle')
+            );
+            config.bundle.resources.push(cliResource);
+          }
+
+          fs.writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(config, null, 2));
+          console.log('Updated tauri.conf.json with CLI bundle config');
+          "
+
+      - name: Build frontend
+        run: pnpm build
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          tauriScript: pnpm tauri
+          args: --target ${{ env.TAURI_TARGET }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: WorkAny-macos-arm64
+          path: |
+            src-tauri/target/${{ env.TAURI_TARGET }}/release/bundle/dmg/*.dmg
+            src-tauri/target/${{ env.TAURI_TARGET }}/release/bundle/macos/*.app
+          if-no-files-found: ignore
