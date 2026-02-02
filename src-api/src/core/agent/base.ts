@@ -285,7 +285,7 @@ For **COMPLEX TASKS**, respond ONLY with:
 User: "who are u"
 Response:
 \`\`\`json
-{"type": "direct_answer", "answer": "I'm WorkAny, an AI assistant that can help you with coding, document creation, and more!"}
+{"type": "direct_answer", "answer": "我是灵思，一个可以帮助你编程、创建文档等任务的AI助手！"}
 \`\`\`
 
 User: "写个脚本计算鸡兔同笼"

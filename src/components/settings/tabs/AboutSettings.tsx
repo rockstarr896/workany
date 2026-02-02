@@ -76,7 +76,8 @@ export function AboutSettings() {
         </div>
       </div>
 
-      {/* Author & Copyright */}
+      {/* Author & Copyright - Hidden */}
+      {/*
       <div className="space-y-3">
         <div className="border-border flex items-center justify-between rounded-lg border p-3">
           <span className="text-muted-foreground text-sm">
@@ -123,8 +124,10 @@ export function AboutSettings() {
           </button>
         </div>
       </div>
+      */}
 
-      {/* Links */}
+      {/* Links - Hidden */}
+      {/*
       <div className="flex flex-wrap gap-3">
         <button
           onClick={() =>
@@ -172,8 +175,10 @@ export function AboutSettings() {
           {t.settings.reportIssue}
         </button>
       </div>
+      */}
 
-      {/* Built with ShipAny */}
+      {/* Built with ShipAny - Hidden */}
+      {/*
       <div className="border-border border-t pt-4">
         <button
           onClick={() =>
@@ -187,6 +192,7 @@ export function AboutSettings() {
           <ExternalLink className="size-3" />
         </button>
       </div>
+      */}
     </div>
   );
 }
